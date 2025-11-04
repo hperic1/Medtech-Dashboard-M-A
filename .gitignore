@@ -26,6 +26,10 @@ wheels/
 # Streamlit
 .streamlit/secrets.toml
 
+# Data files (if you want to exclude your Excel file from git)
+*.xlsx
+!MedTech_MA_Masterlist.xlsx
+
 # IDE
 .vscode/
 .idea/
@@ -39,7 +43,3 @@ Thumbs.db
 
 # Logs
 *.log
-
-# Temporary files
-*.tmp
-temp/
