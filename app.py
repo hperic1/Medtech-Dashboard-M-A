@@ -37,33 +37,82 @@ st.markdown("""
 def load_data():
     """Load data from Excel file"""
     try:
-        excel_path = '/mnt/project/MedTech_MA_Masterlist.xlsx'
+        # Try multiple possible file paths - INCLUDING data folder
+        possible_paths = [
+            'data/MedTech_YTD_Standardized.xlsx',  # In data folder
+            './data/MedTech_YTD_Standardized.xlsx',  # In data folder (explicit)
+            'MedTech_YTD_Standardized.xlsx',  # Same directory as app.py
+            'MedTech_MA_Masterlist.xlsx',  # Old filename
+            './MedTech_MA_Masterlist.xlsx',
+            '/mnt/project/MedTech_MA_Masterlist.xlsx',
+            os.path.join(os.path.dirname(__file__), 'data', 'MedTech_YTD_Standardized.xlsx'),
+            os.path.join(os.path.dirname(__file__), 'MedTech_YTD_Standardized.xlsx')
+        ]
         
-        # Load M&A data
-        ma_df = pd.read_excel(excel_path, sheet_name='YTD_MA_Activity')
+        excel_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                excel_path = path
+                st.success(f"✅ Found data file at: {path}")
+                break
         
-        # Load Investment data
-        inv_df = pd.read_excel(excel_path, sheet_name='YTD_Investment_Activity')
+        if excel_path is None:
+            st.error("❌ Cannot find MedTech_YTD_Standardized.xlsx. Please ensure the file is in the 'data' folder or same directory as app.py")
+            st.info("📁 Looking in these locations:\n" + "\n".join(f"- {p}" for p in possible_paths))
+            return pd.DataFrame(), pd.DataFrame()
+        
+        # Load M&A data - NOTE: Sheet name has SPACES not underscores
+        ma_df = pd.read_excel(excel_path, sheet_name='YTD M&A Activity')
+        
+        # Load Investment data - NOTE: Sheet name has SPACES not underscores
+        inv_df = pd.read_excel(excel_path, sheet_name='YTD Investment Activity')
         
         # Clean and standardize data
         ma_df = ma_df.fillna('Undisclosed')
         inv_df = inv_df.fillna('Undisclosed')
         
+        st.success(f"✅ Loaded {len(ma_df)} M&A deals and {len(inv_df)} investment deals")
+        
         return ma_df, inv_df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
+        st.info("💡 Make sure your Excel file has sheets named 'YTD M&A Activity' and 'YTD Investment Activity' (with spaces)")
         return pd.DataFrame(), pd.DataFrame()
 
 def save_data(ma_df, inv_df):
     """Save data back to Excel file"""
     try:
-        excel_path = '/mnt/project/MedTech_MA_Masterlist.xlsx'
+        # Try multiple possible file paths - INCLUDING data folder
+        possible_paths = [
+            'data/MedTech_YTD_Standardized.xlsx',
+            './data/MedTech_YTD_Standardized.xlsx',
+            'MedTech_YTD_Standardized.xlsx',
+            'MedTech_MA_Masterlist.xlsx',
+            './MedTech_MA_Masterlist.xlsx',
+            '/mnt/project/MedTech_MA_Masterlist.xlsx',
+            os.path.join(os.path.dirname(__file__), 'data', 'MedTech_YTD_Standardized.xlsx'),
+            os.path.join(os.path.dirname(__file__), 'MedTech_YTD_Standardized.xlsx')
+        ]
+        
+        excel_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                excel_path = path
+                break
+        
+        if excel_path is None:
+            # If file doesn't exist, create it in the data folder
+            os.makedirs('data', exist_ok=True)
+            excel_path = 'data/MedTech_YTD_Standardized.xlsx'
+        
+        # Save with correct sheet names (with spaces)
         with pd.ExcelWriter(excel_path, engine='openpyxl', mode='w') as writer:
-            ma_df.to_excel(writer, sheet_name='YTD_MA_Activity', index=False)
-            inv_df.to_excel(writer, sheet_name='YTD_Investment_Activity', index=False)
+            ma_df.to_excel(writer, sheet_name='YTD M&A Activity', index=False)
+            inv_df.to_excel(writer, sheet_name='YTD Investment Activity', index=False)
         return True
     except Exception as e:
         st.error(f"Error saving data: {str(e)}")
+        st.warning("⚠️ Note: Streamlit Cloud has a read-only file system. Changes won't persist after app restarts.")
         return False
 
 def format_currency(value):
