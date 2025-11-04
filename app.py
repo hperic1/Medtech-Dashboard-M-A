@@ -319,11 +319,14 @@ def show_deal_activity(ma_df, inv_df):
             # Format the deal value properly
             value = row['Deal_Value_Numeric']
             if value >= 1000:
-                formatted_value = f"${value/1000:.1f}B"
+                pure_value = f"${value/1000:.1f} billion"
+                summary = f"(${value/1000:.1f}B)"
             elif value > 0:
-                formatted_value = f"${value:.0f}M"
+                pure_value = f"${value:.0f} million"
+                summary = f"(${value:.0f}M)"
             else:
-                formatted_value = "Undisclosed"
+                pure_value = "Undisclosed"
+                summary = ""
             
             # Get deal type verb
             deal_type = row['Deal Type (Merger / Acquisition)']
@@ -331,7 +334,7 @@ def show_deal_activity(ma_df, inv_df):
             
             # Display with new format
             st.markdown(f"**{row['Acquirer']} {verb} {row['Company']}**")
-            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #1f77b4;'>{pure_value} {summary}</h1>", unsafe_allow_html=True)
             st.markdown("---")
     
     with tab3:
@@ -389,16 +392,18 @@ def show_deal_activity(ma_df, inv_df):
             # Format the amount properly
             value = row['Amount_Numeric']
             if value >= 1000:
-                formatted_value = f"${value/1000:.1f}B"
+                pure_value = f"${value/1000:.1f} billion"
+                summary = f"(${value/1000:.1f}B)"
             elif value > 0:
-                formatted_value = f"${value:.0f}M"
+                pure_value = f"${value:.0f} million"
+                summary = f"(${value:.0f}M)"
             else:
-                formatted_value = "Undisclosed"
+                pure_value = "Undisclosed"
+                summary = ""
             
-            # Display with new format: Company raised Amount
-            funding_type = row['Funding type (VC / PE)']
-            st.markdown(f"**{row['Company']} raised {funding_type} funding from {row['Lead Investors']}**")
-            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
+            # Display with new format: Only company name
+            st.markdown(f"**{row['Company']}**")
+            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{pure_value} {summary}</h1>", unsafe_allow_html=True)
             st.markdown("---")
     
     with tab3:
@@ -412,33 +417,20 @@ def show_jp_morgan_summary():
     
     st.markdown("### 2025 Q1-Q3 Activity by Category")
     
-    # Create 2x2 grid for charts
-    row1_col1, row1_col2 = st.columns(2)
-    row2_col1, row2_col2 = st.columns(2)
+    # Create 1x2 grid for charts (only M&A and Venture)
+    col1, col2 = st.columns(2)
     
-    # Top left: M&A
-    with row1_col1:
+    # Left: M&A
+    with col1:
         fig_ma = create_jp_morgan_chart_by_category('M&A', '#1f77b4')
         if fig_ma:
             st.plotly_chart(fig_ma, use_container_width=True)
     
-    # Top right: Venture
-    with row1_col2:
+    # Right: Venture
+    with col2:
         fig_venture = create_jp_morgan_chart_by_category('Venture', '#ff7f0e')
         if fig_venture:
             st.plotly_chart(fig_venture, use_container_width=True)
-    
-    # Bottom left: IPO
-    with row2_col1:
-        fig_ipo = create_jp_morgan_chart_by_category('IPO', '#2ca02c')
-        if fig_ipo:
-            st.plotly_chart(fig_ipo, use_container_width=True)
-    
-    # Bottom right: Licensing
-    with row2_col2:
-        fig_licensing = create_jp_morgan_chart_by_category('Licensing', '#d62728')
-        if fig_licensing:
-            st.plotly_chart(fig_licensing, use_container_width=True)
     
     # Key trends below the charts
     st.markdown("---")
@@ -449,31 +441,19 @@ def show_jp_morgan_summary():
     with col1:
         st.markdown("#### M&A Activity")
         st.info("""
-        - Strong Q2 performance with $15.0B in deal value
-        - Continued focus on cardiovascular and minimally invasive technologies
-        - Strategic consolidation driving large-scale acquisitions
-        """)
-        
-        st.markdown("#### Venture Capital")
-        st.info("""
-        - Steady growth throughout 2024 with Q4 peak at $9.5B
-        - AI-enabled diagnostics and digital health platforms attracting significant investment
-        - Series B and C rounds dominating the funding landscape
+        - **Q1 2025**: $9.2B across 57 deals - Strong start with strategic acquisitions including Stryker's $4.9B acquisition of Inari Medical
+        - **Q2 2025**: $2.1B across 43 deals - Activity slowed as market stability concerns affected deal appetite
+        - **Q3 2025**: $21.7B across 65 deals - Significant surge in deal value and volume, surpassing full-year 2024 figures
+        - **Key Focus**: Strategic consolidation in cardiovascular and minimally invasive technologies continues to drive large-scale transactions
         """)
         
     with col2:
-        st.markdown("#### IPO Market")
+        st.markdown("#### Venture Capital")
         st.info("""
-        - Gradual recovery with Q2 showing strongest performance at $1.5B
-        - Selective high-quality offerings gaining traction
-        - Investor appetite returning for profitable medtech companies
-        """)
-        
-        st.markdown("#### Licensing Deals")
-        st.info("""
-        - Q2 peak at $4.0B reflecting strong partnership activity
-        - Breakthrough therapy designations driving deal flow
-        - Increasing focus on novel therapeutic platforms
+        - **Q1 2025**: $3.7B across 117 rounds - Strong quarter with larger investments into fewer companies, including 13 rounds over $100M
+        - **Q2 2025**: $2.3B - Decreased from Q1 despite strong start to the year
+        - **Q3 2025**: $2.9B across 67 rounds - Slight decline from Q3 2024, with year-to-date total at $9.5B across 259 rounds
+        - **Key Trend**: Late-stage rounds (Series B+) dominate at $7.9B YTD, while early-stage (Seed/Series A) continues to lag
         """)
 
 def show_data_management(ma_df, inv_df):
@@ -606,7 +586,7 @@ def show_jp_morgan_upload():
     st.info("""
     📄 **Instructions:**
     1. Upload the quarterly JP Morgan MedTech Industry Report (PDF or text)
-    2. The system will extract key data for M&A, Venture, IPO, and Licensing activity
+    2. The system will extract key data for M&A and Venture activity
     3. Charts and key takeaways will be automatically updated in the JP Morgan Summary page
     """)
     
@@ -645,25 +625,9 @@ def show_jp_morgan_upload():
             with col2:
                 vc_count = st.number_input("Venture Deal Count", min_value=0, value=0, step=1)
             
-            st.markdown("#### IPO Activity")
-            col1, col2 = st.columns(2)
-            with col1:
-                ipo_value = st.number_input("IPO Deal Value ($M)", min_value=0.0, value=0.0, step=100.0)
-            with col2:
-                ipo_count = st.number_input("IPO Count", min_value=0, value=0, step=1)
-            
-            st.markdown("#### Licensing Deals")
-            col1, col2 = st.columns(2)
-            with col1:
-                licensing_value = st.number_input("Licensing Deal Value ($M)", min_value=0.0, value=0.0, step=100.0)
-            with col2:
-                licensing_count = st.number_input("Licensing Deal Count", min_value=0, value=0, step=1)
-            
             st.markdown("#### Key Takeaways")
             ma_takeaway = st.text_area("M&A Key Takeaway", placeholder="Enter key insight for M&A activity...")
             vc_takeaway = st.text_area("Venture Capital Key Takeaway", placeholder="Enter key insight for VC activity...")
-            ipo_takeaway = st.text_area("IPO Key Takeaway", placeholder="Enter key insight for IPO activity...")
-            licensing_takeaway = st.text_area("Licensing Key Takeaway", placeholder="Enter key insight for licensing activity...")
             
             submitted = st.form_submit_button("💾 Save JP Morgan Data")
             
@@ -673,9 +637,7 @@ def show_jp_morgan_upload():
                     'year': report_year,
                     'quarter': report_quarter,
                     'ma': {'value': ma_value, 'count': ma_count, 'takeaway': ma_takeaway},
-                    'venture': {'value': vc_value, 'count': vc_count, 'takeaway': vc_takeaway},
-                    'ipo': {'value': ipo_value, 'count': ipo_count, 'takeaway': ipo_takeaway},
-                    'licensing': {'value': licensing_value, 'count': licensing_count, 'takeaway': licensing_takeaway}
+                    'venture': {'value': vc_value, 'count': vc_count, 'takeaway': vc_takeaway}
                 }
                 
                 # Create data directory if it doesn't exist
