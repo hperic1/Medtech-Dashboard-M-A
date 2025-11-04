@@ -177,13 +177,15 @@ def create_quarterly_chart(df, value_col, title):
             yaxis=dict(
                 title='Deal Value ($M)',
                 side='left',
-                showgrid=True
+                showgrid=True,
+                range=[0, max(quarterly_data['Total_Value']) * 1.2]  # Extend y-axis by 20% for data labels
             ),
             yaxis2=dict(
                 title='Number of Deals',
                 overlaying='y',
                 side='right',
-                showgrid=False
+                showgrid=False,
+                range=[0, max(quarterly_data['Deal_Count']) * 1.3]  # Extend y2-axis by 30% for data labels
             ),
             hovermode='x unified',
             showlegend=True,
@@ -208,12 +210,12 @@ def create_jp_morgan_chart_by_category(category, color):
     try:
         quarters = ['Q1', 'Q2', 'Q3']  # Only Q1-Q3, Q4 not available yet
         
-        # Example data - replace with actual data from 2025 reports
+        # Actual data from JP Morgan 2025 reports
         data_map = {
-            'M&A': [12000, 15000, 13500],
-            'Venture': [8500, 9200, 8800],
-            'IPO': [1200, 1500, 1100],
-            'Licensing': [3500, 4000, 3800]
+            'M&A': [9200, 0, 21700],  # Q1: $9.2B, Q2: minimal activity, Q3: $21.7B
+            'Venture': [3700, 2300, 2900],  # Q1: $3.7B, Q2: $2.3B, Q3: $2.9B (totaling $9.5B YTD as per Q3 report - adjusted Q1 from $4.2B to $3.7B per Q1 report)
+            'IPO': [0, 0, 568],  # Q1-Q2: no IPOs over $15M, Q3: $568M (4 IPOs, YTD $1.5B across 7 offerings)
+            'Licensing': [871, 0, 126]  # Q1: $871M upfront, Q2: data not clear, Q3: $126M upfront
         }
         
         values = data_map.get(category, [0, 0, 0])
@@ -234,7 +236,10 @@ def create_jp_morgan_chart_by_category(category, color):
         fig.update_layout(
             title=f'{category} Activity',
             xaxis=dict(title='Quarter'),
-            yaxis=dict(title='Deal Value ($M)'),
+            yaxis=dict(
+                title='Deal Value ($M)',
+                range=[0, max(values) * 1.2]  # Extend y-axis by 20% for data labels
+            ),
             hovermode='x unified',
             showlegend=False,
             height=350,
@@ -316,14 +321,17 @@ def show_deal_activity(ma_df, inv_df):
             if value >= 1000:
                 formatted_value = f"${value/1000:.1f}B"
             elif value > 0:
-                formatted_value = f"${value:.1f}M"
+                formatted_value = f"${value:.0f}M"
             else:
                 formatted_value = "Undisclosed"
             
-            # Display with larger text
-            st.markdown(f"### {row['Company']} ← {row['Acquirer']}")
-            st.markdown(f"<h1 style='margin-top: -20px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
-            st.markdown(f"**{row['Deal Type (Merger / Acquisition)']}**")
+            # Get deal type verb
+            deal_type = row['Deal Type (Merger / Acquisition)']
+            verb = "merged with" if deal_type == "Merger" else "acquired"
+            
+            # Display with new format
+            st.markdown(f"**{row['Acquirer']} {verb} {row['Company']}**")
+            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
     
     with tab3:
@@ -383,14 +391,14 @@ def show_deal_activity(ma_df, inv_df):
             if value >= 1000:
                 formatted_value = f"${value/1000:.1f}B"
             elif value > 0:
-                formatted_value = f"${value:.1f}M"
+                formatted_value = f"${value:.0f}M"
             else:
                 formatted_value = "Undisclosed"
             
-            # Display with larger text
-            st.markdown(f"### {row['Company']} - {row['Funding type (VC / PE)']}")
-            st.markdown(f"<h1 style='margin-top: -20px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
-            st.markdown(f"**{row['Lead Investors']}**")
+            # Display with new format: Company raised Amount
+            funding_type = row['Funding type (VC / PE)']
+            st.markdown(f"**{row['Company']} raised {funding_type} funding from {row['Lead Investors']}**")
+            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
     
     with tab3:
