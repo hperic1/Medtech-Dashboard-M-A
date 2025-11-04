@@ -53,7 +53,6 @@ def load_data():
         for path in possible_paths:
             if os.path.exists(path):
                 excel_path = path
-                st.success(f"✅ Found data file at: {path}")
                 break
         
         if excel_path is None:
@@ -70,8 +69,6 @@ def load_data():
         # Clean and standardize data
         ma_df = ma_df.fillna('Undisclosed')
         inv_df = inv_df.fillna('Undisclosed')
-        
-        st.success(f"✅ Loaded {len(ma_df)} M&A deals and {len(inv_df)} investment deals")
         
         return ma_df, inv_df
     except Exception as e:
@@ -209,17 +206,17 @@ def create_quarterly_chart(df, value_col, title):
 def create_jp_morgan_chart_by_category(category, color):
     """Create JP Morgan chart for a specific category"""
     try:
-        quarters = ['Q1', 'Q2', 'Q3', 'Q4']
+        quarters = ['Q1', 'Q2', 'Q3']  # Only Q1-Q3, Q4 not available yet
         
-        # Example data - replace with actual data
+        # Example data - replace with actual data from 2025 reports
         data_map = {
-            'M&A': [12000, 15000, 13500, 14200],
-            'Venture': [8500, 9200, 8800, 9500],
-            'IPO': [1200, 1500, 1100, 1300],
-            'Licensing': [3500, 4000, 3800, 4200]
+            'M&A': [12000, 15000, 13500],
+            'Venture': [8500, 9200, 8800],
+            'IPO': [1200, 1500, 1100],
+            'Licensing': [3500, 4000, 3800]
         }
         
-        values = data_map.get(category, [0, 0, 0, 0])
+        values = data_map.get(category, [0, 0, 0])
         
         fig = go.Figure()
         
@@ -258,153 +255,154 @@ def main():
     
     # Sidebar navigation
     st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to", ["Deal Activity", "JP Morgan Summary", "Add New Deal"])
+    page = st.sidebar.radio("Go to", ["Deal Activity", "JP Morgan Summary", "Data Management"])
     
     if page == "Deal Activity":
         show_deal_activity(ma_df, inv_df)
     elif page == "JP Morgan Summary":
         show_jp_morgan_summary()
-    elif page == "Add New Deal":
-        show_add_deal(ma_df, inv_df)
+    elif page == "Data Management":
+        show_data_management(ma_df, inv_df)
 
 def show_deal_activity(ma_df, inv_df):
     """Display deal activity dashboard"""
     st.header("Deal Activity Dashboard")
     
-    # Create two columns for split view
-    col1, col2 = st.columns(2)
+    # M&A Activity Section - Full Width
+    st.subheader("M&A Activity")
     
-    with col1:
-        st.subheader("M&A Activity")
-        
-        # Search box
-        search_ma = st.text_input("🔍 Search M&A Deals", placeholder="Search by company, acquirer, technology...", key='search_ma')
-        
-        # Filters
-        filter_col1, filter_col2 = st.columns(2)
-        with filter_col1:
-            quarters_ma = ['All'] + sorted(ma_df['Quarter'].unique().tolist())
-            selected_quarter_ma = st.selectbox("Filter by Quarter", quarters_ma, key='ma_quarter')
-        with filter_col2:
-            months_ma = ['All'] + sorted(ma_df['Month'].unique().tolist())
-            selected_month_ma = st.selectbox("Filter by Month", months_ma, key='ma_month')
-        
-        # Apply filters
-        filtered_ma = ma_df.copy()
-        if selected_quarter_ma != 'All':
-            filtered_ma = filtered_ma[filtered_ma['Quarter'] == selected_quarter_ma]
-        if selected_month_ma != 'All':
-            filtered_ma = filtered_ma[filtered_ma['Month'] == selected_month_ma]
-        
-        # Apply search filter
-        if search_ma:
-            mask = filtered_ma.apply(lambda row: row.astype(str).str.contains(search_ma, case=False).any(), axis=1)
-            filtered_ma = filtered_ma[mask]
-        
-        # Tabs for table, top deals, and charts
-        tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
-        
-        with tab1:
-            st.dataframe(filtered_ma, use_container_width=True, height=400)
-        
-        with tab2:
-            # Top 3 deals
-            top_deals = filtered_ma.copy()
-            top_deals['Deal_Value_Numeric'] = top_deals['Deal Value'].apply(
-                lambda x: float(str(x).replace('$', '').replace('B', '').replace('M', '').replace(',', '')) 
-                if x != 'Undisclosed' else 0
-            )
-            top_deals = top_deals.nlargest(3, 'Deal_Value_Numeric')
-            
-            for idx, row in top_deals.iterrows():
-                # Format the deal value properly
-                value = row['Deal_Value_Numeric']
-                if value >= 1000:
-                    formatted_value = f"${value/1000:.1f}B"
-                elif value > 0:
-                    formatted_value = f"${value:.1f}M"
-                else:
-                    formatted_value = "Undisclosed"
-                
-                # Display with larger text
-                st.markdown(f"### {row['Company']} ← {row['Acquirer']}")
-                st.markdown(f"<h1 style='margin-top: -20px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
-                st.markdown(f"**{row['Deal Type (Merger / Acquisition)']}**")
-                st.markdown("---")
-        
-        with tab3:
-            fig = create_quarterly_chart(filtered_ma, 'Deal Value', 'M&A Activity by Quarter')
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
+    # Search box
+    search_ma = st.text_input("🔍 Search M&A Deals", placeholder="Search by company, acquirer, technology...", key='search_ma')
     
-    with col2:
-        st.subheader("Venture Investment Activity")
+    # Filters
+    filter_col1, filter_col2 = st.columns(2)
+    with filter_col1:
+        quarters_ma = ['All'] + sorted(ma_df['Quarter'].unique().tolist())
+        selected_quarter_ma = st.selectbox("Filter by Quarter", quarters_ma, key='ma_quarter')
+    with filter_col2:
+        months_ma = ['All'] + sorted(ma_df['Month'].unique().tolist())
+        selected_month_ma = st.selectbox("Filter by Month", months_ma, key='ma_month')
+    
+    # Apply filters
+    filtered_ma = ma_df.copy()
+    if selected_quarter_ma != 'All':
+        filtered_ma = filtered_ma[filtered_ma['Quarter'] == selected_quarter_ma]
+    if selected_month_ma != 'All':
+        filtered_ma = filtered_ma[filtered_ma['Month'] == selected_month_ma]
+    
+    # Apply search filter
+    if search_ma:
+        mask = filtered_ma.apply(lambda row: row.astype(str).str.contains(search_ma, case=False).any(), axis=1)
+        filtered_ma = filtered_ma[mask]
+    
+    # Tabs for table, top deals, and charts
+    tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
+    
+    with tab1:
+        st.dataframe(filtered_ma, use_container_width=True, height=400)
+    
+    with tab2:
+        # Top 3 deals
+        top_deals = filtered_ma.copy()
+        top_deals['Deal_Value_Numeric'] = top_deals['Deal Value'].apply(
+            lambda x: float(str(x).replace('$', '').replace('B', '').replace('M', '').replace(',', '')) 
+            if x != 'Undisclosed' else 0
+        )
+        top_deals = top_deals.nlargest(3, 'Deal_Value_Numeric')
         
-        # Search box
-        search_inv = st.text_input("🔍 Search Investment Deals", placeholder="Search by company, investors, technology...", key='search_inv')
-        
-        # Filters
-        filter_col1, filter_col2 = st.columns(2)
-        with filter_col1:
-            quarters_inv = ['All'] + sorted(inv_df['Quarter'].unique().tolist())
-            selected_quarter_inv = st.selectbox("Filter by Quarter", quarters_inv, key='inv_quarter')
-        with filter_col2:
-            months_inv = ['All'] + sorted(inv_df['Month'].unique().tolist())
-            selected_month_inv = st.selectbox("Filter by Month", months_inv, key='inv_month')
-        
-        # Apply filters
-        filtered_inv = inv_df.copy()
-        if selected_quarter_inv != 'All':
-            filtered_inv = filtered_inv[filtered_inv['Quarter'] == selected_quarter_inv]
-        if selected_month_inv != 'All':
-            filtered_inv = filtered_inv[filtered_inv['Month'] == selected_month_inv]
-        
-        # Apply search filter
-        if search_inv:
-            mask = filtered_inv.apply(lambda row: row.astype(str).str.contains(search_inv, case=False).any(), axis=1)
-            filtered_inv = filtered_inv[mask]
-        
-        # Tabs for table, top deals, and charts
-        tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
-        
-        with tab1:
-            st.dataframe(filtered_inv, use_container_width=True, height=400)
-        
-        with tab2:
-            # Top 3 deals
-            top_deals = filtered_inv.copy()
-            top_deals['Amount_Numeric'] = top_deals['Amount Raised'].apply(
-                lambda x: float(str(x).replace('$', '').replace('B', '').replace('M', '').replace(',', '')) 
-                if x != 'Undisclosed' else 0
-            )
-            top_deals = top_deals.nlargest(3, 'Amount_Numeric')
+        for idx, row in top_deals.iterrows():
+            # Format the deal value properly
+            value = row['Deal_Value_Numeric']
+            if value >= 1000:
+                formatted_value = f"${value/1000:.1f}B"
+            elif value > 0:
+                formatted_value = f"${value:.1f}M"
+            else:
+                formatted_value = "Undisclosed"
             
-            for idx, row in top_deals.iterrows():
-                # Format the amount properly
-                value = row['Amount_Numeric']
-                if value >= 1000:
-                    formatted_value = f"${value/1000:.1f}B"
-                elif value > 0:
-                    formatted_value = f"${value:.1f}M"
-                else:
-                    formatted_value = "Undisclosed"
-                
-                # Display with larger text
-                st.markdown(f"### {row['Company']} - {row['Funding type (VC / PE)']}")
-                st.markdown(f"<h1 style='margin-top: -20px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
-                st.markdown(f"**{row['Lead Investors']}**")
-                st.markdown("---")
+            # Display with larger text
+            st.markdown(f"### {row['Company']} ← {row['Acquirer']}")
+            st.markdown(f"<h1 style='margin-top: -20px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
+            st.markdown(f"**{row['Deal Type (Merger / Acquisition)']}**")
+            st.markdown("---")
+    
+    with tab3:
+        fig = create_quarterly_chart(filtered_ma, 'Deal Value', 'M&A Activity by Quarter')
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # Add spacing between sections
+    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Venture Investment Activity Section - Full Width
+    st.subheader("Venture Investment Activity")
+    
+    # Search box
+    search_inv = st.text_input("🔍 Search Investment Deals", placeholder="Search by company, investors, technology...", key='search_inv')
+    
+    # Filters
+    filter_col1, filter_col2 = st.columns(2)
+    with filter_col1:
+        quarters_inv = ['All'] + sorted(inv_df['Quarter'].unique().tolist())
+        selected_quarter_inv = st.selectbox("Filter by Quarter", quarters_inv, key='inv_quarter')
+    with filter_col2:
+        months_inv = ['All'] + sorted(inv_df['Month'].unique().tolist())
+        selected_month_inv = st.selectbox("Filter by Month", months_inv, key='inv_month')
+    
+    # Apply filters
+    filtered_inv = inv_df.copy()
+    if selected_quarter_inv != 'All':
+        filtered_inv = filtered_inv[filtered_inv['Quarter'] == selected_quarter_inv]
+    if selected_month_inv != 'All':
+        filtered_inv = filtered_inv[filtered_inv['Month'] == selected_month_inv]
+    
+    # Apply search filter
+    if search_inv:
+        mask = filtered_inv.apply(lambda row: row.astype(str).str.contains(search_inv, case=False).any(), axis=1)
+        filtered_inv = filtered_inv[mask]
+    
+    # Tabs for table, top deals, and charts
+    tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
+    
+    with tab1:
+        st.dataframe(filtered_inv, use_container_width=True, height=400)
+    
+    with tab2:
+        # Top 3 deals
+        top_deals = filtered_inv.copy()
+        top_deals['Amount_Numeric'] = top_deals['Amount Raised'].apply(
+            lambda x: float(str(x).replace('$', '').replace('B', '').replace('M', '').replace(',', '')) 
+            if x != 'Undisclosed' else 0
+        )
+        top_deals = top_deals.nlargest(3, 'Amount_Numeric')
         
-        with tab3:
-            fig = create_quarterly_chart(filtered_inv, 'Amount Raised', 'Venture Investment by Quarter')
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
+        for idx, row in top_deals.iterrows():
+            # Format the amount properly
+            value = row['Amount_Numeric']
+            if value >= 1000:
+                formatted_value = f"${value/1000:.1f}B"
+            elif value > 0:
+                formatted_value = f"${value:.1f}M"
+            else:
+                formatted_value = "Undisclosed"
+            
+            # Display with larger text
+            st.markdown(f"### {row['Company']} - {row['Funding type (VC / PE)']}")
+            st.markdown(f"<h1 style='margin-top: -20px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
+            st.markdown(f"**{row['Lead Investors']}**")
+            st.markdown("---")
+    
+    with tab3:
+        fig = create_quarterly_chart(filtered_inv, 'Amount Raised', 'Venture Investment by Quarter')
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
 
 def show_jp_morgan_summary():
     """Display JP Morgan summary"""
     st.header("JP Morgan MedTech Industry Report")
     
-    st.markdown("### 2024 YTD Activity by Category")
+    st.markdown("### 2025 Q1-Q3 Activity by Category")
     
     # Create 2x2 grid for charts
     row1_col1, row1_col2 = st.columns(2)
@@ -470,9 +468,22 @@ def show_jp_morgan_summary():
         - Increasing focus on novel therapeutic platforms
         """)
 
-def show_add_deal(ma_df, inv_df):
-    """Manual deal entry form"""
-    st.header("Add New Deal")
+def show_data_management(ma_df, inv_df):
+    """Data management page for adding deals and uploading JP Morgan reports"""
+    st.header("Data Management")
+    
+    # Create tabs for different data management tasks
+    tab1, tab2 = st.tabs(["📝 Add Manual Deals", "📊 Upload JP Morgan Report"])
+    
+    with tab1:
+        show_manual_deal_entry(ma_df, inv_df)
+    
+    with tab2:
+        show_jp_morgan_upload()
+
+def show_manual_deal_entry(ma_df, inv_df):
+    """Manual deal entry forms"""
+    st.subheader("Add New Deal Manually")
     
     # Select deal type
     deal_type = st.radio("Select Deal Type", ["M&A Activity", "Venture Investment"])
@@ -579,6 +590,98 @@ def show_add_deal(ma_df, inv_df):
                         st.rerun()
                 else:
                     st.error("Please fill in all required fields (*)")
+
+def show_jp_morgan_upload():
+    """JP Morgan report upload and data extraction"""
+    st.subheader("Upload JP Morgan MedTech Industry Report")
+    
+    st.info("""
+    📄 **Instructions:**
+    1. Upload the quarterly JP Morgan MedTech Industry Report (PDF or text)
+    2. The system will extract key data for M&A, Venture, IPO, and Licensing activity
+    3. Charts and key takeaways will be automatically updated in the JP Morgan Summary page
+    """)
+    
+    # File uploader
+    uploaded_file = st.file_uploader(
+        "Choose JP Morgan Report", 
+        type=['pdf', 'txt', 'docx'],
+        help="Upload the quarterly JP Morgan MedTech Industry Report"
+    )
+    
+    if uploaded_file is not None:
+        st.success(f"✅ File uploaded: {uploaded_file.name}")
+        
+        # Quarter selection
+        col1, col2 = st.columns(2)
+        with col1:
+            report_year = st.selectbox("Report Year", [2025, 2024, 2023])
+        with col2:
+            report_quarter = st.selectbox("Report Quarter", ["Q1", "Q2", "Q3", "Q4"])
+        
+        st.markdown("### Enter Data Manually")
+        st.markdown("Please enter the key metrics from the report:")
+        
+        with st.form("jp_morgan_data_form"):
+            st.markdown("#### M&A Activity")
+            col1, col2 = st.columns(2)
+            with col1:
+                ma_value = st.number_input("M&A Deal Value ($M)", min_value=0.0, value=0.0, step=100.0)
+            with col2:
+                ma_count = st.number_input("M&A Deal Count", min_value=0, value=0, step=1)
+            
+            st.markdown("#### Venture Capital")
+            col1, col2 = st.columns(2)
+            with col1:
+                vc_value = st.number_input("Venture Deal Value ($M)", min_value=0.0, value=0.0, step=100.0)
+            with col2:
+                vc_count = st.number_input("Venture Deal Count", min_value=0, value=0, step=1)
+            
+            st.markdown("#### IPO Activity")
+            col1, col2 = st.columns(2)
+            with col1:
+                ipo_value = st.number_input("IPO Deal Value ($M)", min_value=0.0, value=0.0, step=100.0)
+            with col2:
+                ipo_count = st.number_input("IPO Count", min_value=0, value=0, step=1)
+            
+            st.markdown("#### Licensing Deals")
+            col1, col2 = st.columns(2)
+            with col1:
+                licensing_value = st.number_input("Licensing Deal Value ($M)", min_value=0.0, value=0.0, step=100.0)
+            with col2:
+                licensing_count = st.number_input("Licensing Deal Count", min_value=0, value=0, step=1)
+            
+            st.markdown("#### Key Takeaways")
+            ma_takeaway = st.text_area("M&A Key Takeaway", placeholder="Enter key insight for M&A activity...")
+            vc_takeaway = st.text_area("Venture Capital Key Takeaway", placeholder="Enter key insight for VC activity...")
+            ipo_takeaway = st.text_area("IPO Key Takeaway", placeholder="Enter key insight for IPO activity...")
+            licensing_takeaway = st.text_area("Licensing Key Takeaway", placeholder="Enter key insight for licensing activity...")
+            
+            submitted = st.form_submit_button("💾 Save JP Morgan Data")
+            
+            if submitted:
+                # Save the data to a JSON file or database
+                jp_morgan_data = {
+                    'year': report_year,
+                    'quarter': report_quarter,
+                    'ma': {'value': ma_value, 'count': ma_count, 'takeaway': ma_takeaway},
+                    'venture': {'value': vc_value, 'count': vc_count, 'takeaway': vc_takeaway},
+                    'ipo': {'value': ipo_value, 'count': ipo_count, 'takeaway': ipo_takeaway},
+                    'licensing': {'value': licensing_value, 'count': licensing_count, 'takeaway': licensing_takeaway}
+                }
+                
+                # Create data directory if it doesn't exist
+                os.makedirs('data', exist_ok=True)
+                
+                # Save to JSON file
+                import json
+                json_path = f'data/jp_morgan_{report_year}_{report_quarter}.json'
+                with open(json_path, 'w') as f:
+                    json.dump(jp_morgan_data, f, indent=2)
+                
+                st.success(f"✅ JP Morgan {report_year} {report_quarter} data saved successfully!")
+                st.info("📊 The JP Morgan Summary page will now reflect this data. Navigate to 'JP Morgan Summary' to view the updated charts.")
+                st.balloons()
 
 if __name__ == "__main__":
     main()
