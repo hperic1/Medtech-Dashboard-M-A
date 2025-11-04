@@ -206,57 +206,47 @@ def create_quarterly_chart(df, value_col, title):
         st.error(f"Error creating chart: {str(e)}")
         return None
 
-def create_jp_morgan_chart():
-    """Create JP Morgan summary chart"""
+def create_jp_morgan_chart_by_category(category, color):
+    """Create JP Morgan chart for a specific category"""
     try:
-        # JP Morgan 2024 data (example data - replace with actual)
-        categories = ['M&A', 'Venture', 'IPO', 'Licensing']
-        
         quarters = ['Q1', 'Q2', 'Q3', 'Q4']
-        data = {
-            'Q1': [12000, 8500, 1200, 3500],
-            'Q2': [15000, 9200, 1500, 4000],
-            'Q3': [13500, 8800, 1100, 3800],
-            'Q4': [14200, 9500, 1300, 4200]
+        
+        # Example data - replace with actual data
+        data_map = {
+            'M&A': [12000, 15000, 13500, 14200],
+            'Venture': [8500, 9200, 8800, 9500],
+            'IPO': [1200, 1500, 1100, 1300],
+            'Licensing': [3500, 4000, 3800, 4200]
         }
+        
+        values = data_map.get(category, [0, 0, 0, 0])
         
         fig = go.Figure()
         
         # Add bars for each quarter
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
-        for i, quarter in enumerate(quarters):
-            fig.add_trace(go.Bar(
-                name=quarter,
-                x=categories,
-                y=data[quarter],
-                marker_color=colors[i],
-                text=[format_currency(v) for v in data[quarter]],
-                textposition='outside',
-                hovertemplate='<b>%{x}</b><br>%{fullData.name}: %{text}<br><extra></extra>'
-            ))
+        fig.add_trace(go.Bar(
+            x=quarters,
+            y=values,
+            marker_color=color,
+            text=[format_currency(v) for v in values],
+            textposition='outside',
+            hovertemplate='<b>%{x}</b><br>Deal Value: %{text}<br><extra></extra>'
+        ))
         
-        # Update layout - NO line graph overlay
+        # Update layout
         fig.update_layout(
-            title='JP Morgan MedTech Industry Report - 2024 YTD Activity',
-            xaxis=dict(title='Category'),
+            title=f'{category} Activity',
+            xaxis=dict(title='Quarter'),
             yaxis=dict(title='Deal Value ($M)'),
-            barmode='group',
             hovermode='x unified',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            height=500,
-            margin=dict(t=100, b=50, l=50, r=50)
+            showlegend=False,
+            height=350,
+            margin=dict(t=50, b=50, l=50, r=50)
         )
         
         return fig
     except Exception as e:
-        st.error(f"Error creating JP Morgan chart: {str(e)}")
+        st.error(f"Error creating {category} chart: {str(e)}")
         return None
 
 # Main app
@@ -287,6 +277,9 @@ def show_deal_activity(ma_df, inv_df):
     with col1:
         st.subheader("M&A Activity")
         
+        # Search box
+        search_ma = st.text_input("🔍 Search M&A Deals", placeholder="Search by company, acquirer, technology...", key='search_ma')
+        
         # Filters
         filter_col1, filter_col2 = st.columns(2)
         with filter_col1:
@@ -302,6 +295,11 @@ def show_deal_activity(ma_df, inv_df):
             filtered_ma = filtered_ma[filtered_ma['Quarter'] == selected_quarter_ma]
         if selected_month_ma != 'All':
             filtered_ma = filtered_ma[filtered_ma['Month'] == selected_month_ma]
+        
+        # Apply search filter
+        if search_ma:
+            mask = filtered_ma.apply(lambda row: row.astype(str).str.contains(search_ma, case=False).any(), axis=1)
+            filtered_ma = filtered_ma[mask]
         
         # Tabs for table, top deals, and charts
         tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
@@ -319,11 +317,20 @@ def show_deal_activity(ma_df, inv_df):
             top_deals = top_deals.nlargest(3, 'Deal_Value_Numeric')
             
             for idx, row in top_deals.iterrows():
-                st.metric(
-                    label=f"{row['Company']} ← {row['Acquirer']}",
-                    value=format_currency(row['Deal Value']),
-                    delta=row['Deal Type (Merger / Acquisition)']
-                )
+                # Format the deal value properly
+                value = row['Deal_Value_Numeric']
+                if value >= 1000:
+                    formatted_value = f"${value/1000:.1f}B"
+                elif value > 0:
+                    formatted_value = f"${value:.1f}M"
+                else:
+                    formatted_value = "Undisclosed"
+                
+                # Display with larger text
+                st.markdown(f"### {row['Company']} ← {row['Acquirer']}")
+                st.markdown(f"<h1 style='margin-top: -20px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
+                st.markdown(f"**{row['Deal Type (Merger / Acquisition)']}**")
+                st.markdown("---")
         
         with tab3:
             fig = create_quarterly_chart(filtered_ma, 'Deal Value', 'M&A Activity by Quarter')
@@ -332,6 +339,9 @@ def show_deal_activity(ma_df, inv_df):
     
     with col2:
         st.subheader("Venture Investment Activity")
+        
+        # Search box
+        search_inv = st.text_input("🔍 Search Investment Deals", placeholder="Search by company, investors, technology...", key='search_inv')
         
         # Filters
         filter_col1, filter_col2 = st.columns(2)
@@ -349,6 +359,11 @@ def show_deal_activity(ma_df, inv_df):
         if selected_month_inv != 'All':
             filtered_inv = filtered_inv[filtered_inv['Month'] == selected_month_inv]
         
+        # Apply search filter
+        if search_inv:
+            mask = filtered_inv.apply(lambda row: row.astype(str).str.contains(search_inv, case=False).any(), axis=1)
+            filtered_inv = filtered_inv[mask]
+        
         # Tabs for table, top deals, and charts
         tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
         
@@ -365,11 +380,20 @@ def show_deal_activity(ma_df, inv_df):
             top_deals = top_deals.nlargest(3, 'Amount_Numeric')
             
             for idx, row in top_deals.iterrows():
-                st.metric(
-                    label=f"{row['Company']} - {row['Funding type (VC / PE)']}",
-                    value=format_currency(row['Amount Raised']),
-                    delta=row['Lead Investors']
-                )
+                # Format the amount properly
+                value = row['Amount_Numeric']
+                if value >= 1000:
+                    formatted_value = f"${value/1000:.1f}B"
+                elif value > 0:
+                    formatted_value = f"${value:.1f}M"
+                else:
+                    formatted_value = "Undisclosed"
+                
+                # Display with larger text
+                st.markdown(f"### {row['Company']} - {row['Funding type (VC / PE)']}")
+                st.markdown(f"<h1 style='margin-top: -20px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
+                st.markdown(f"**{row['Lead Investors']}**")
+                st.markdown("---")
         
         with tab3:
             fig = create_quarterly_chart(filtered_inv, 'Amount Raised', 'Venture Investment by Quarter')
@@ -380,39 +404,71 @@ def show_jp_morgan_summary():
     """Display JP Morgan summary"""
     st.header("JP Morgan MedTech Industry Report")
     
-    # Create chart
-    fig = create_jp_morgan_chart()
-    if fig:
-        st.plotly_chart(fig, use_container_width=True)
+    st.markdown("### 2024 YTD Activity by Category")
     
-    # Key deals and insights
-    st.subheader("Key Deals & Insights")
+    # Create 2x2 grid for charts
+    row1_col1, row1_col2 = st.columns(2)
+    row2_col1, row2_col2 = st.columns(2)
+    
+    # Top left: M&A
+    with row1_col1:
+        fig_ma = create_jp_morgan_chart_by_category('M&A', '#1f77b4')
+        if fig_ma:
+            st.plotly_chart(fig_ma, use_container_width=True)
+    
+    # Top right: Venture
+    with row1_col2:
+        fig_venture = create_jp_morgan_chart_by_category('Venture', '#ff7f0e')
+        if fig_venture:
+            st.plotly_chart(fig_venture, use_container_width=True)
+    
+    # Bottom left: IPO
+    with row2_col1:
+        fig_ipo = create_jp_morgan_chart_by_category('IPO', '#2ca02c')
+        if fig_ipo:
+            st.plotly_chart(fig_ipo, use_container_width=True)
+    
+    # Bottom right: Licensing
+    with row2_col2:
+        fig_licensing = create_jp_morgan_chart_by_category('Licensing', '#d62728')
+        if fig_licensing:
+            st.plotly_chart(fig_licensing, use_container_width=True)
+    
+    # Key trends below the charts
+    st.markdown("---")
+    st.subheader("Key Market Trends")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### Notable M&A Transactions")
-        st.markdown("""
-        - **Boston Scientific** acquired **Axonics** for $3.7B (Q1 2024)
-        - **Johnson & Johnson** acquired **Shockwave Medical** for $13.1B (Q2 2024)
-        - **Stryker** acquired **Inari Medical** for $4.9B (Q3 2024)
+        st.markdown("#### M&A Activity")
+        st.info("""
+        - Strong Q2 performance with $15.0B in deal value
+        - Continued focus on cardiovascular and minimally invasive technologies
+        - Strategic consolidation driving large-scale acquisitions
+        """)
+        
+        st.markdown("#### Venture Capital")
+        st.info("""
+        - Steady growth throughout 2024 with Q4 peak at $9.5B
+        - AI-enabled diagnostics and digital health platforms attracting significant investment
+        - Series B and C rounds dominating the funding landscape
         """)
         
     with col2:
-        st.markdown("### Major Venture Rounds")
-        st.markdown("""
-        - **Guardant Health** raised $500M Series F (Q1 2024)
-        - **Neumora Therapeutics** raised $500M Series C (Q2 2024)
-        - **Verily Life Sciences** raised $1B Series E (Q3 2024)
+        st.markdown("#### IPO Market")
+        st.info("""
+        - Gradual recovery with Q2 showing strongest performance at $1.5B
+        - Selective high-quality offerings gaining traction
+        - Investor appetite returning for profitable medtech companies
         """)
-    
-    st.markdown("### Market Trends")
-    st.info("""
-    - M&A activity remains robust with focus on cardiovascular and minimally invasive technologies
-    - Venture funding continues to flow into AI-enabled diagnostics and digital health platforms
-    - IPO market showing signs of recovery with selective high-quality offerings
-    - Licensing deals increasingly focused on breakthrough therapy designations
-    """)
+        
+        st.markdown("#### Licensing Deals")
+        st.info("""
+        - Q2 peak at $4.0B reflecting strong partnership activity
+        - Breakthrough therapy designations driving deal flow
+        - Increasing focus on novel therapeutic platforms
+        """)
 
 def show_add_deal(ma_df, inv_df):
     """Manual deal entry form"""
@@ -464,8 +520,10 @@ def show_add_deal(ma_df, inv_df):
                     
                     # Save data
                     if save_data(ma_df_updated, inv_df):
-                        st.success("M&A deal added successfully!")
+                        st.success("✅ M&A deal added successfully!")
                         st.balloons()
+                        # Clear cache to reload data
+                        st.cache_data.clear()
                         st.rerun()
                 else:
                     st.error("Please fill in all required fields (*)")
@@ -514,8 +572,10 @@ def show_add_deal(ma_df, inv_df):
                     
                     # Save data
                     if save_data(ma_df, inv_df_updated):
-                        st.success("Investment deal added successfully!")
+                        st.success("✅ Investment deal added successfully!")
                         st.balloons()
+                        # Clear cache to reload data
+                        st.cache_data.clear()
                         st.rerun()
                 else:
                     st.error("Please fill in all required fields (*)")
