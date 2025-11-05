@@ -208,44 +208,82 @@ def create_quarterly_chart(df, value_col, title):
         return None
 
 def create_jp_morgan_chart_by_category(category, color):
-    """Create JP Morgan chart for a specific category"""
+    """Create JP Morgan chart for a specific category with deal count overlay"""
     try:
         quarters = ['Q1', 'Q2', 'Q3']  # Only Q1-Q3, Q4 not available yet
         
         # Actual data from JP Morgan 2025 reports
         data_map = {
-            'M&A': [9200, 2100, 21700],  # Q1: $9.2B (57 deals), Q2: $2.1B (43 deals), Q3: $21.7B (65 deals)
-            'Venture': [3700, 2300, 2900],  # Q1: $3.7B, Q2: $2.3B, Q3: $2.9B (totaling $9.5B YTD)
-            'IPO': [0, 0, 568],  # Q1-Q2: no IPOs over $15M, Q3: $568M
-            'Licensing': [871, 0, 126]  # Q1: $871M upfront, Q2: data not clear, Q3: $126M upfront
+            'M&A': {
+                'values': [9200, 2100, 21700],  # Q1: $9.2B (57 deals), Q2: $2.1B (43 deals), Q3: $21.7B (65 deals)
+                'counts': [57, 43, 65]
+            },
+            'Venture': {
+                'values': [3700, 2300, 2900],  # Q1: $3.7B (117 rounds), Q2: $2.3B, Q3: $2.9B (67 rounds)
+                'counts': [117, 0, 67]  # Q2 count not specified in reports
+            }
         }
         
-        values = data_map.get(category, [0, 0, 0])
+        category_data = data_map.get(category, {'values': [0, 0, 0], 'counts': [0, 0, 0]})
+        values = category_data['values']
+        counts = category_data['counts']
         
         fig = go.Figure()
         
-        # Add bars for each quarter
+        # Add bars for deal values
         fig.add_trace(go.Bar(
             x=quarters,
             y=values,
+            name='Deal Value ($M)',
             marker_color=color,
             text=[format_currency(v) for v in values],
             textposition='outside',
+            yaxis='y',
             hovertemplate='<b>%{x}</b><br>Deal Value: %{text}<br><extra></extra>'
         ))
         
-        # Update layout
+        # Add line chart for deal count
+        fig.add_trace(go.Scatter(
+            x=quarters,
+            y=counts,
+            name='Deal Count',
+            mode='lines+markers+text',
+            line=dict(color='#2ca02c', width=3),
+            marker=dict(size=10),
+            text=[str(c) if c > 0 else '' for c in counts],
+            textposition='top center',
+            yaxis='y2',
+            hovertemplate='<b>%{x}</b><br>Deal Count: %{y}<br><extra></extra>'
+        ))
+        
+        # Update layout with dual y-axes
         fig.update_layout(
             title=f'{category} Activity',
             xaxis=dict(title='Quarter'),
             yaxis=dict(
                 title='Deal Value ($M)',
+                side='left',
+                showgrid=True,
                 range=[0, max(values) * 1.2]  # Extend y-axis by 20% for data labels
             ),
+            yaxis2=dict(
+                title='Number of Deals',
+                overlaying='y',
+                side='right',
+                showgrid=False,
+                range=[0, max(counts) * 1.3] if max(counts) > 0 else [0, 100]  # Extend y2-axis
+            ),
             hovermode='x unified',
-            showlegend=False,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
             height=350,
-            margin=dict(t=50, b=50, l=50, r=50)
+            margin=dict(t=80, b=50, l=50, r=50)
         )
         
         return fig
@@ -311,14 +349,30 @@ def show_deal_activity(ma_df, inv_df):
     with tab2:
         # Top 3 deals
         top_deals = filtered_ma.copy()
-        top_deals['Deal_Value_Numeric'] = top_deals['Deal Value'].apply(
-            lambda x: float(str(x).replace('$', '').replace('B', '').replace('M', '').replace(',', '')) 
-            if x != 'Undisclosed' else 0
-        )
+        
+        # Improved parsing function to handle B and M suffixes
+        def parse_deal_value(val):
+            if val == 'Undisclosed' or pd.isna(val):
+                return 0
+            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+            try:
+                if 'B' in val_str:
+                    # Value is in billions, convert to millions
+                    return float(val_str.replace('B', '')) * 1000
+                elif 'M' in val_str:
+                    # Value is already in millions
+                    return float(val_str.replace('M', ''))
+                else:
+                    # Plain number, assume millions
+                    return float(val_str)
+            except:
+                return 0
+        
+        top_deals['Deal_Value_Numeric'] = top_deals['Deal Value'].apply(parse_deal_value)
         top_deals = top_deals.nlargest(3, 'Deal_Value_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Format the deal value properly
+            # Format exactly like chart labels: $9.2B or $467M
             value = row['Deal_Value_Numeric']
             if value >= 1000:
                 formatted_value = f"${value/1000:.1f}B"
@@ -331,7 +385,7 @@ def show_deal_activity(ma_df, inv_df):
             deal_type = row['Deal Type (Merger / Acquisition)']
             verb = "merged with" if deal_type == "Merger" else "acquired"
             
-            # Display with new format - just the formatted value, no brackets
+            # Display with chart-style formatting
             st.markdown(f"**{row['Acquirer']} {verb} {row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
@@ -381,14 +435,30 @@ def show_deal_activity(ma_df, inv_df):
     with tab2:
         # Top 3 deals
         top_deals = filtered_inv.copy()
-        top_deals['Amount_Numeric'] = top_deals['Amount Raised'].apply(
-            lambda x: float(str(x).replace('$', '').replace('B', '').replace('M', '').replace(',', '')) 
-            if x != 'Undisclosed' else 0
-        )
+        
+        # Improved parsing function to handle B and M suffixes
+        def parse_amount_value(val):
+            if val == 'Undisclosed' or pd.isna(val):
+                return 0
+            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+            try:
+                if 'B' in val_str:
+                    # Value is in billions, convert to millions
+                    return float(val_str.replace('B', '')) * 1000
+                elif 'M' in val_str:
+                    # Value is already in millions
+                    return float(val_str.replace('M', ''))
+                else:
+                    # Plain number, assume millions
+                    return float(val_str)
+            except:
+                return 0
+        
+        top_deals['Amount_Numeric'] = top_deals['Amount Raised'].apply(parse_amount_value)
         top_deals = top_deals.nlargest(3, 'Amount_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Format the amount properly
+            # Format exactly like chart labels: $3.7B or $467M
             value = row['Amount_Numeric']
             if value >= 1000:
                 formatted_value = f"${value/1000:.1f}B"
@@ -397,7 +467,7 @@ def show_deal_activity(ma_df, inv_df):
             else:
                 formatted_value = "Undisclosed"
             
-            # Display with new format: Only company name and clean formatted value
+            # Display with chart-style formatting - company name only
             st.markdown(f"**{row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
