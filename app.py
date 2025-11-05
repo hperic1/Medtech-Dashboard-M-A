@@ -1133,12 +1133,20 @@ def show_web_scraper(ma_df, inv_df):
     if 'scraped_deals' in st.session_state and st.session_state.scraped_deals:
         st.markdown("---")
         st.subheader("Review Extracted Deals")
-        st.markdown("Edit the information below before adding to the dashboard:")
+        st.markdown(f"**{len(st.session_state.scraped_deals)} deals found** - Edit or remove deals before adding to dashboard:")
         
         deals_to_add = []
+        deals_to_remove = []
         
         for idx, deal in enumerate(st.session_state.scraped_deals):
             with st.expander(f"Deal {idx + 1}: {deal['company']}", expanded=True):
+                # Add delete button at the top right
+                col_delete, col_spacer = st.columns([1, 5])
+                with col_delete:
+                    if st.button(f"🗑️ Remove", key=f"delete_{idx}", type="secondary", use_container_width=True):
+                        deals_to_remove.append(idx)
+                        st.rerun()
+                
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -1195,8 +1203,30 @@ def show_web_scraper(ma_df, inv_df):
                         'month': month
                     })
         
-        # Add all deals button
-        if st.button("✅ Add All Deals to Dashboard", type="primary"):
+        # Remove deals if any were marked for deletion
+        if deals_to_remove:
+            for idx in sorted(deals_to_remove, reverse=True):
+                st.session_state.scraped_deals.pop(idx)
+            st.rerun()
+        
+        # Add action buttons
+        st.markdown("---")
+        col1, col2, col3 = st.columns([2, 2, 2])
+        
+        with col1:
+            add_all_clicked = st.button("✅ Add All Deals to Dashboard", type="primary", use_container_width=True)
+        
+        with col2:
+            if st.button("🗑️ Clear All Deals", type="secondary", use_container_width=True):
+                st.session_state.scraped_deals = []
+                st.success("All deals cleared!")
+                st.rerun()
+        
+        with col3:
+            st.metric("Deals to Add", len(deals_to_add))
+        
+        # Only proceed with adding if the Add All button was clicked
+        if add_all_clicked:
             ma_updated = ma_df.copy()
             inv_updated = inv_df.copy()
             
