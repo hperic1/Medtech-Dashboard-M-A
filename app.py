@@ -1179,50 +1179,110 @@ def process_extracted_deals(extracted_deals, ma_df, inv_df):
     """Display and allow editing of extracted deals before adding"""
     st.markdown("---")
     st.subheader("Review and Edit Extracted Deals")
-    st.markdown(f"**{len(extracted_deals)} deals found** - Edit or remove deals before adding:")
+    st.markdown(f"**{len(extracted_deals)} deals found** - Review and edit before adding to dashboard")
     
     deals_to_add = []
     deals_to_remove = []
     
     for idx, deal in enumerate(extracted_deals):
-        with st.expander(f"Deal {idx + 1}: {deal.get('company', 'Unknown')} ({deal.get('type', 'Unknown')})", expanded=True):
-            col_delete, col_spacer = st.columns([1, 5])
-            with col_delete:
+        # Determine initial deal type
+        initial_type_idx = 0 if deal.get('type') == 'M&A' else 1
+        
+        with st.expander(f"Deal {idx + 1}: {deal.get('company', 'Unknown')}", expanded=True):
+            # Header with remove button
+            col_header1, col_header2 = st.columns([5, 1])
+            with col_header1:
+                st.markdown(f"**Deal Type:** {deal.get('type', 'Unknown')}")
+            with col_header2:
                 if st.button(f"🗑️ Remove", key=f"delete_{idx}", type="secondary", use_container_width=True):
                     deals_to_remove.append(idx)
             
+            st.markdown("---")
+            
+            # Deal Type Selection - This determines which fields are shown
+            deal_type_select = st.radio(
+                "Select Deal Type*",
+                ["M&A Activity", "Venture Investment"],
+                index=initial_type_idx,
+                key=f"type_{idx}",
+                horizontal=True,
+                help="Choose whether this is an M&A transaction or venture investment"
+            )
+            
+            st.markdown("###")  # Add spacing
+            
+            # Layout fields in 2 columns based on deal type
             col1, col2 = st.columns(2)
             
             with col1:
-                deal_type_select = st.selectbox(
-                    "Deal Type*",
-                    ["M&A Activity", "Venture Investment"],
-                    index=0 if deal.get('type') == 'M&A' else 1,
-                    key=f"type_{idx}"
+                company = st.text_input(
+                    "Company*",
+                    value=deal.get('company', ''),
+                    key=f"company_{idx}",
+                    help="Name of the company"
                 )
                 
-                company = st.text_input("Company*", value=deal.get('company', ''), key=f"company_{idx}")
-                
+                # M&A SPECIFIC FIELDS
                 if deal_type_select == "M&A Activity":
-                    acquirer = st.text_input("Acquirer*", value=deal.get('acquirer', ''), key=f"acquirer_{idx}")
-                    deal_subtype = st.selectbox("Deal Subtype*", ["Acquisition", "Merger"], key=f"subtype_{idx}")
+                    acquirer = st.text_input(
+                        "Acquirer*",
+                        value=deal.get('acquirer', ''),
+                        key=f"acquirer_{idx}",
+                        help="Company acquiring the target"
+                    )
+                    deal_subtype = st.selectbox(
+                        "Deal Type*",
+                        ["Acquisition", "Merger"],
+                        key=f"subtype_{idx}",
+                        help="Type of M&A transaction"
+                    )
+                
+                # VENTURE SPECIFIC FIELDS
                 else:
-                    funding_type = st.selectbox("Funding Type*", ["VC", "PE"], key=f"funding_{idx}")
-                    lead_investors = st.text_input("Lead Investors", value=deal.get('acquirer', ''), key=f"investors_{idx}")
+                    funding_type = st.selectbox(
+                        "Funding Type*",
+                        ["VC", "PE"],
+                        key=f"funding_{idx}",
+                        help="Venture Capital or Private Equity"
+                    )
             
             with col2:
                 technology = st.text_area(
                     "Technology/Description*",
                     value=deal.get('description', ''),
                     height=100,
-                    key=f"tech_{idx}"
+                    key=f"tech_{idx}",
+                    help="Brief description of the technology or business"
                 )
-                deal_value = st.text_input(
-                    "Deal Value (e.g., 100M, 1.5B, or Undisclosed)",
-                    value=deal.get('value', 'Undisclosed'),
-                    key=f"value_{idx}"
+                
+                # Different labels and placeholders for M&A vs Venture
+                if deal_type_select == "M&A Activity":
+                    deal_value = st.text_input(
+                        "Deal Value (e.g., 100M, 1.5B, or Undisclosed)",
+                        value=deal.get('value', 'Undisclosed'),
+                        key=f"value_{idx}",
+                        placeholder="e.g., 100M, 1.5B, or Undisclosed",
+                        help="Transaction value"
+                    )
+                else:
+                    deal_value = st.text_input(
+                        "Amount Raised (e.g., 50M, 1.2B, or Undisclosed)",
+                        value=deal.get('value', 'Undisclosed'),
+                        key=f"value_{idx}",
+                        placeholder="e.g., 50M, 1.2B, or Undisclosed",
+                        help="Amount of investment raised"
+                    )
+            
+            # Lead Investors field (ONLY for Venture, full width)
+            if deal_type_select == "Venture Investment":
+                lead_investors = st.text_input(
+                    "Lead Investors",
+                    value=deal.get('acquirer', ''),
+                    key=f"investors_{idx}",
+                    help="Primary investors in the funding round (optional)"
                 )
             
+            # Date fields
             col3, col4 = st.columns(2)
             with col3:
                 quarter = st.selectbox(
@@ -1242,7 +1302,7 @@ def process_extracted_deals(extracted_deals, ma_df, inv_df):
                     key=f"month_{idx}"
                 )
             
-            # Store edited deal
+            # Store edited deal with appropriate fields
             if deal_type_select == "M&A Activity":
                 deals_to_add.append({
                     'type': 'M&A',
@@ -1259,7 +1319,7 @@ def process_extracted_deals(extracted_deals, ma_df, inv_df):
                     'type': 'Venture',
                     'company': company,
                     'funding_type': funding_type,
-                    'lead_investors': lead_investors,
+                    'lead_investors': lead_investors if deal_type_select == "Venture Investment" else 'Undisclosed',
                     'technology': technology,
                     'value': deal_value,
                     'quarter': quarter,
@@ -1314,17 +1374,20 @@ def show_bulk_excel_upload(ma_df, inv_df):
     **Upload a CSV or Excel file with deal data**
     
     Your file can have any column names. You'll map them to the required fields:
-    - Company
-    - Acquirer (for M&A) or Lead Investors (for Venture)
-    - Technology/Description
-    - Deal Value or Amount Raised
-    - Date (we'll auto-detect quarter/month)
+    - **Company** (required)
+    - **Technology/Description** (required)
+    - **Deal Value or Amount Raised** (required)
+    - **Date** (required - we'll auto-detect quarter/month)
+    - **Acquirer** (for M&A deals)
+    - **Lead Investors** (for Venture deals)
+    - **Type** (if your file has mixed deal types)
     """)
     
     uploaded_file = st.file_uploader(
         "Choose CSV or Excel file",
         type=['csv', 'xlsx', 'xls'],
-        key="bulk_upload"
+        key="bulk_upload",
+        help="Upload a CSV or Excel file with your deal data"
     )
     
     if uploaded_file is not None:
@@ -1338,62 +1401,101 @@ def show_bulk_excel_upload(ma_df, inv_df):
             st.success(f"✅ File uploaded: {uploaded_file.name} ({len(df)} rows)")
             
             # Show preview
-            st.markdown("### File Preview")
+            st.markdown("### 📋 File Preview")
             st.dataframe(df.head(10), use_container_width=True)
             
             # Column mapping
-            st.markdown("### Map Your Columns")
+            st.markdown("### 🔗 Map Your Columns")
             
             col1, col2 = st.columns(2)
             
             with col1:
                 st.markdown("**Required Fields**")
                 
-                company_col = st.selectbox("Company Column", [''] + list(df.columns), key="company_col")
-                tech_col = st.selectbox("Technology/Description Column", [''] + list(df.columns), key="tech_col")
-                value_col = st.selectbox("Deal Value/Amount Column", [''] + list(df.columns), key="value_col")
-                date_col = st.selectbox("Date Column", [''] + list(df.columns), key="date_col")
+                company_col = st.selectbox("Company Column*", [''] + list(df.columns), key="company_col")
+                tech_col = st.selectbox("Technology/Description Column*", [''] + list(df.columns), key="tech_col")
+                value_col = st.selectbox("Deal Value/Amount Column*", [''] + list(df.columns), key="value_col")
+                date_col = st.selectbox("Date Column*", [''] + list(df.columns), key="date_col")
             
             with col2:
-                st.markdown("**Deal Type Specific**")
+                st.markdown("**Deal Type Configuration**")
                 
-                deal_type_option = st.radio("Primary Deal Type", ["M&A Activity", "Venture Investment", "Mixed (has Type column)"])
+                deal_type_option = st.radio(
+                    "Primary Deal Type",
+                    ["M&A Activity", "Venture Investment", "Mixed (has Type column)"],
+                    help="Select the primary type of deals in your file"
+                )
                 
                 if deal_type_option == "Mixed (has Type column)":
-                    type_col = st.selectbox("Type Column", [''] + list(df.columns), key="type_col")
+                    type_col = st.selectbox(
+                        "Type Column*",
+                        [''] + list(df.columns),
+                        key="type_col",
+                        help="Column that indicates whether each deal is M&A or Venture"
+                    )
                 else:
                     type_col = None
                 
+                # M&A specific fields
                 if deal_type_option in ["M&A Activity", "Mixed (has Type column)"]:
-                    acquirer_col = st.selectbox("Acquirer Column", [''] + list(df.columns), key="acquirer_col")
+                    acquirer_col = st.selectbox(
+                        "Acquirer Column" + ("*" if deal_type_option == "M&A Activity" else " (optional)"),
+                        [''] + list(df.columns),
+                        key="acquirer_col",
+                        help="Company acquiring the target"
+                    )
                 else:
                     acquirer_col = None
                 
+                # Venture specific fields
                 if deal_type_option in ["Venture Investment", "Mixed (has Type column)"]:
-                    investors_col = st.selectbox("Lead Investors Column (optional)", [''] + list(df.columns), key="investors_col")
+                    investors_col = st.selectbox(
+                        "Lead Investors Column (optional)",
+                        [''] + list(df.columns),
+                        key="investors_col",
+                        help="Primary investors in the funding round"
+                    )
                 else:
                     investors_col = None
             
+            # Validation
+            required_filled = all([company_col, tech_col, value_col, date_col])
+            
+            if deal_type_option == "M&A Activity":
+                required_filled = required_filled and acquirer_col
+            elif deal_type_option == "Mixed (has Type column)":
+                required_filled = required_filled and type_col
+            
             # Process button
-            if st.button("🔄 Process and Preview Deals", type="primary", use_container_width=True):
-                if not all([company_col, tech_col, value_col, date_col]):
-                    st.error("❌ Please map all required fields")
-                else:
-                    with st.spinner("Processing deals..."):
-                        processed_deals = process_bulk_upload(
-                            df, company_col, tech_col, value_col, date_col,
-                            deal_type_option, type_col, acquirer_col, investors_col
-                        )
-                        
-                        if processed_deals:
-                            st.session_state.scraped_deals = processed_deals
-                            st.success(f"✅ Processed {len(processed_deals)} deals!")
-                            st.rerun()
-                        else:
-                            st.error("❌ No valid deals found in the file")
+            col_btn1, col_btn2 = st.columns([3, 1])
+            with col_btn1:
+                process_button = st.button(
+                    "🔄 Process and Preview Deals",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=not required_filled
+                )
+            with col_btn2:
+                if not required_filled:
+                    st.warning("⚠️ Fill required fields")
+            
+            if process_button:
+                with st.spinner("Processing deals..."):
+                    processed_deals = process_bulk_upload(
+                        df, company_col, tech_col, value_col, date_col,
+                        deal_type_option, type_col, acquirer_col, investors_col
+                    )
+                    
+                    if processed_deals:
+                        st.session_state.scraped_deals = processed_deals
+                        st.success(f"✅ Processed {len(processed_deals)} deals!")
+                        st.rerun()
+                    else:
+                        st.error("❌ No valid deals found in the file")
         
         except Exception as e:
             st.error(f"❌ Error reading file: {str(e)}")
+            st.info("💡 Make sure your file is a valid CSV or Excel file")
 
 def process_bulk_upload(df, company_col, tech_col, value_col, date_col, 
                        deal_type_option, type_col, acquirer_col, investors_col):
