@@ -1069,82 +1069,79 @@ def show_web_scraper(ma_df, inv_df):
                         if e.response.status_code == 403:
                             st.error("❌ This website blocks automated scraping (403 Forbidden)")
                             
-                            # Show screenshot upload option
+                            # Show PDF upload option
                             st.markdown("---")
-                            st.subheader("📸 Alternative: Upload Screenshots")
+                            st.subheader("📄 Alternative: Upload PDF")
                             st.info("""
-                            **Can't scrape? Upload screenshots instead!**
+                            **Can't scrape? Upload a PDF instead!**
                             
-                            1. Take screenshots of the article showing the deals
-                            2. Upload them below
-                            3. AI will extract the deal information automatically
+                            1. Print the webpage as PDF (Ctrl+P → Save as PDF)
+                            2. Upload the PDF below
+                            3. AI will extract all deal information automatically
                             4. Review and edit before adding to dashboard
+                            
+                            **This works great for blocked websites!**
                             """)
                             
-                            uploaded_images = st.file_uploader(
-                                "Upload screenshots of the article",
-                                type=['png', 'jpg', 'jpeg'],
-                                accept_multiple_files=True,
-                                help="Take screenshots showing company names, acquirers, and deal values"
+                            uploaded_pdf = st.file_uploader(
+                                "Upload PDF of the article",
+                                type=['pdf'],
+                                help="Print the webpage as PDF and upload it here"
                             )
                             
-                            if uploaded_images:
-                                if st.button("🔍 Extract Deals from Screenshots", type="primary"):
-                                    with st.spinner("Analyzing screenshots and extracting deal information..."):
+                            if uploaded_pdf:
+                                if st.button("🔍 Extract Deals from PDF", type="primary"):
+                                    with st.spinner("Reading PDF and extracting deal information..."):
                                         try:
-                                            from PIL import Image
-                                            import pytesseract
+                                            import PyPDF2
                                             import io
                                             
-                                            all_extracted_text = []
+                                            # Read PDF
+                                            pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_pdf.read()))
                                             
-                                            # Process each image
-                                            for img_file in uploaded_images:
-                                                # Open image
-                                                image = Image.open(img_file)
-                                                
-                                                # Display thumbnail
-                                                st.image(image, caption=f"Processing: {img_file.name}", width=300)
-                                                
-                                                # Extract text using OCR
-                                                try:
-                                                    text = pytesseract.image_to_string(image)
-                                                    all_extracted_text.append(text)
-                                                except Exception as ocr_error:
-                                                    # Fallback: analyze image without OCR
-                                                    st.warning(f"OCR not available. Using alternative text extraction for {img_file.name}")
-                                                    # Simple text extraction fallback
-                                                    text = ""
+                                            # Extract text from all pages
+                                            all_text = []
+                                            for page_num, page in enumerate(pdf_reader.pages):
+                                                text = page.extract_text()
+                                                all_text.append(text)
+                                                st.success(f"✓ Processed page {page_num + 1} of {len(pdf_reader.pages)}")
                                             
-                                            # Combine all extracted text
-                                            combined_text = "\n\n".join(all_extracted_text)
+                                            combined_text = "\n\n".join(all_text)
                                             
                                             if not combined_text.strip():
-                                                st.error("❌ No text could be extracted from the images")
-                                                st.info("💡 **Manual entry recommended**: Switch to 'Add Manual Deals' tab")
+                                                st.error("❌ No text could be extracted from the PDF")
+                                                st.info("💡 **Try**: Make sure the PDF contains selectable text (not scanned images)")
                                                 return
                                             
-                                            # Extract deals from the combined text using same patterns
+                                            st.success(f"✅ Extracted {len(combined_text)} characters from PDF")
+                                            
+                                            # Extract deals from the text using same patterns
                                             extracted_deals = []
                                             
                                             patterns = [
-                                                r'([A-Z][A-Za-z\s&]+?)\s+(?:acquired|purchased|bought)\s+(?:by\s+)?([A-Z][A-Za-z\s&]+?)(?:\s+for\s+\$?([\d.]+)\s*(billion|million|B|M))?',
-                                                r'([A-Z][A-Za-z\s&]+?)\s+(?:raises|raised|secures|secured)\s+\$?([\d.]+)\s*(billion|million|B|M)',
-                                                r'([A-Z][A-Za-z\s&]+?)\s+(?:acquires|purchases)\s+([A-Z][A-Za-z\s&]+?)(?:\s+for\s+\$?([\d.]+)\s*(billion|million|B|M))?',
+                                                r'([A-Z][A-Za-z\s&\.]+?)\s+(?:acquired|purchased|bought)\s+(?:by\s+)?([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
+                                                r'([A-Z][A-Za-z\s&\.]+?)\s+(?:raises|raised|secures|secured)\s+\$?([\d,\.]+)\s*(billion|million|B|M)',
+                                                r'([A-Z][A-Za-z\s&\.]+?)\s+(?:acquires|purchases|buys)\s+([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
+                                                r'([A-Z][A-Za-z\s&\.]+?)\s+to\s+(?:acquire|purchase|buy)\s+([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
                                             ]
                                             
                                             for pattern in patterns:
-                                                matches = re.finditer(pattern, combined_text, re.IGNORECASE)
+                                                matches = re.finditer(pattern, combined_text, re.IGNORECASE | re.MULTILINE)
                                                 for match in matches:
                                                     groups = match.groups()
+                                                    match_text = match.group(0).lower()
                                                     
-                                                    if 'acquir' in match.group(0).lower() or 'purchas' in match.group(0).lower():
+                                                    if 'acquir' in match_text or 'purchas' in match_text or 'bought' in match_text or 'buys' in match_text:
                                                         deal_type = 'M&A'
                                                         if len(groups) >= 2:
                                                             company = groups[0].strip()
                                                             acquirer = groups[1].strip() if len(groups) > 1 else ''
                                                             value = groups[2] if len(groups) > 2 and groups[2] else 'Undisclosed'
                                                             unit = groups[3] if len(groups) > 3 and groups[3] else ''
+                                                            
+                                                            # Clean up value
+                                                            if value != 'Undisclosed':
+                                                                value = value.replace(',', '')
                                                             
                                                             extracted_deals.append({
                                                                 'type': deal_type,
@@ -1154,12 +1151,16 @@ def show_web_scraper(ma_df, inv_df):
                                                                 'description': match.group(0)[:200]
                                                             })
                                                     
-                                                    elif 'rais' in match.group(0).lower() or 'secur' in match.group(0).lower():
+                                                    elif 'rais' in match_text or 'secur' in match_text:
                                                         deal_type = 'Venture'
                                                         if len(groups) >= 2:
                                                             company = groups[0].strip()
                                                             value = groups[1] if len(groups) > 1 and groups[1] else 'Undisclosed'
                                                             unit = groups[2] if len(groups) > 2 and groups[2] else ''
+                                                            
+                                                            # Clean up value
+                                                            if value != 'Undisclosed':
+                                                                value = value.replace(',', '')
                                                             
                                                             extracted_deals.append({
                                                                 'type': deal_type,
@@ -1169,21 +1170,36 @@ def show_web_scraper(ma_df, inv_df):
                                                                 'description': match.group(0)[:200]
                                                             })
                                             
-                                            if extracted_deals:
-                                                st.session_state.scraped_deals = extracted_deals
-                                                st.success(f"✅ Extracted {len(extracted_deals)} deals from screenshots! Review below.")
+                                            # Remove duplicates based on company name
+                                            seen = set()
+                                            unique_deals = []
+                                            for deal in extracted_deals:
+                                                key = (deal['company'].lower(), deal['value'])
+                                                if key not in seen:
+                                                    seen.add(key)
+                                                    unique_deals.append(deal)
+                                            
+                                            if unique_deals:
+                                                st.session_state.scraped_deals = unique_deals
+                                                st.success(f"✅ Extracted {len(unique_deals)} deals from PDF! Review and edit below.")
                                                 st.rerun()
                                             else:
-                                                st.warning("⚠️ No deals found in the screenshots using pattern matching")
+                                                st.warning("⚠️ No deals found in the PDF using pattern matching")
                                                 st.info("""
                                                 **What to try:**
-                                                1. Make sure screenshots clearly show company names and deal values
-                                                2. Try uploading additional screenshots
-                                                3. Use 'Add Manual Deals' for guaranteed accuracy
+                                                1. Make sure the PDF contains the full article text
+                                                2. Check if deals are mentioned with phrases like "acquired by" or "raises $"
+                                                3. Use 'Add Manual Deals' tab for guaranteed accuracy
+                                                
+                                                **Tip**: You can see the extracted text to verify the PDF loaded correctly.
                                                 """)
+                                                
+                                                # Show a sample of extracted text
+                                                with st.expander("📄 View extracted text (first 1000 characters)"):
+                                                    st.text(combined_text[:1000])
                                         
-                                        except Exception as img_error:
-                                            st.error(f"Error processing images: {str(img_error)}")
+                                        except Exception as pdf_error:
+                                            st.error(f"Error processing PDF: {str(pdf_error)}")
                                             st.info("💡 **Manual entry recommended**: Switch to 'Add Manual Deals' tab")
                             
                             return
