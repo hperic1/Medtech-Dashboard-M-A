@@ -524,6 +524,48 @@ def show_jp_morgan_summary():
     """Display JP Morgan summary"""
     st.header("JP Morgan MedTech Industry Report")
     
+    # Load data for comparison
+    ma_df, inv_df = load_data()
+    
+    # Calculate BeaconOne quarterly stats
+    def calc_quarterly_stats(df, quarter, value_col):
+        q_data = df[df['Quarter'] == quarter]
+        
+        # Parse values
+        def parse_value(val):
+            if val == 'Undisclosed' or pd.isna(val):
+                return 0
+            val_str = str(val).replace('$', '').replace(',', '').strip()
+            try:
+                return float(val_str)
+            except:
+                return 0
+        
+        total_value = sum(q_data[value_col].apply(parse_value))
+        count = len(q_data)
+        
+        # Format value
+        if total_value >= 1000000000:
+            formatted_value = f"${total_value/1000000000:.1f}B"
+        elif total_value >= 1000000:
+            formatted_value = f"${total_value/1000000:.0f}M"
+        else:
+            formatted_value = "$0"
+            
+        return count, formatted_value
+    
+    # Calculate stats for each quarter
+    beacon_stats = {}
+    for q in ['Q1', 'Q2', 'Q3']:
+        ma_count, ma_value = calc_quarterly_stats(ma_df, q, 'Deal Value')
+        inv_count, inv_value = calc_quarterly_stats(inv_df, q, 'Amount Raised')
+        beacon_stats[q] = {
+            'ma_count': ma_count,
+            'ma_value': ma_value,
+            'inv_count': inv_count,
+            'inv_value': inv_value
+        }
+    
     st.markdown("### 2025 Q1-Q3 Activity by Category")
     
     # Create 1x2 grid for charts (only M&A and Venture)
@@ -568,6 +610,184 @@ def show_jp_morgan_summary():
         st.markdown("• **Q3 2025**: Medtech venture funding started the year strong yet had a weaker Q2 and Q3 in a challenging venture funding environment across all of healthcare and life sciences")
         st.markdown("")
         st.markdown("**Overarching Trend**: Late-stage venture rounds continue to dominate at $7.9B YTD, while early-stage funding remains selective as investors focus on companies with proven traction")
+
+    # Add comparison section
+    st.markdown("---")
+    st.markdown("### JPMorgan vs BeaconOne Data - Quarterly Comparison")
+    
+    # Create three columns for Q1, Q2, Q3
+    q1_col, q2_col, q3_col = st.columns(3)
+    
+    with q1_col:
+        st.markdown("#### Q1 2025")
+        st.markdown(f"""
+        <div style='background-color: #4A90E2; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>M&A Deal Count</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>57</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q1']['ma_count']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #357ABD; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>M&A Deal Value</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>$9.2B</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q1']['ma_value']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #50C878; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>Investment Count</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>117</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q1']['inv_count']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #3FA35F; padding: 20px; border-radius: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>Investment Value</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>$3.7B</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q1']['inv_value']}</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with q2_col:
+        st.markdown("#### Q2 2025")
+        st.markdown(f"""
+        <div style='background-color: #4A90E2; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>M&A Deal Count</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>43</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q2']['ma_count']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #357ABD; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>M&A Deal Value</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>$2.1B</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q2']['ma_value']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #50C878; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>Investment Count</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>90</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q2']['inv_count']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #3FA35F; padding: 20px; border-radius: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>Investment Value</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>$2.6B</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q2']['inv_value']}</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with q3_col:
+        st.markdown("#### Q3 2025")
+        st.markdown(f"""
+        <div style='background-color: #9B59B6; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>M&A Deal Count</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>65</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q3']['ma_count']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #8E44AD; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>M&A Deal Value</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>$21.7B</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q3']['ma_value']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #50C878; padding: 20px; border-radius: 10px; margin-bottom: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>Investment Count</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>67</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q3']['inv_count']}</p>
+                </div>
+            </div>
+        </div>
+        <div style='background-color: #3FA35F; padding: 20px; border-radius: 10px;'>
+            <p style='color: white; margin: 0; font-size: 12px;'>Investment Value</p>
+            <div style='display: flex; justify-content: space-between; align-items: baseline;'>
+                <div>
+                    <p style='color: white; margin: 0; font-size: 10px;'>JPMorgan</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>$2.9B</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: white; margin: 0; font-size: 10px;'>BeaconOne</p>
+                    <p style='color: white; margin: 0; font-size: 32px; font-weight: bold;'>{beacon_stats['Q3']['inv_value']}</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 def show_data_management(ma_df, inv_df):
     """Data management page for adding deals and uploading JP Morgan reports"""
