@@ -178,7 +178,7 @@ def create_quarterly_chart(df, value_col, title):
             title=title,
             xaxis=dict(title='Quarter'),
             yaxis=dict(
-                title='Deal Value ($M)',
+                title='Total Deal Value (USD)',
                 side='left',
                 showgrid=True,
                 range=[0, max(quarterly_data['Total_Value']) * 1.2]  # Extend y-axis by 20% for data labels
@@ -262,7 +262,7 @@ def create_jp_morgan_chart_by_category(category, color):
             title=f'{category} Activity',
             xaxis=dict(title='Quarter'),
             yaxis=dict(
-                title='Deal Value ($M)',
+                title='Deal Value (Millions USD)',
                 side='left',
                 showgrid=True,
                 range=[0, max(values) * 1.2]  # Extend y-axis by 20% for data labels
@@ -345,7 +345,37 @@ def show_deal_activity(ma_df, inv_df):
     tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
     
     with tab1:
-        st.dataframe(filtered_ma, use_container_width=True, height=400)
+        # Create display dataframe with sortable numeric values
+        ma_display = filtered_ma.copy()
+        
+        # Add hidden numeric column for sorting
+        def parse_to_numeric(val):
+            if val == 'Undisclosed' or pd.isna(val):
+                return 0
+            val_str = str(val).replace('$', '').replace(',', '').strip()
+            try:
+                return float(val_str)
+            except:
+                return 0
+        
+        # Create a numeric sort column
+        ma_display['_Deal_Value_Numeric'] = ma_display['Deal Value'].apply(parse_to_numeric)
+        
+        # Display without the numeric column (it's just for sorting)
+        display_cols = [col for col in ma_display.columns if not col.startswith('_')]
+        
+        st.dataframe(
+            ma_display[display_cols], 
+            use_container_width=True, 
+            height=400,
+            column_config={
+                "Deal Value": st.column_config.NumberColumn(
+                    "Deal Value",
+                    help="Deal value in USD",
+                    format="$%d",
+                )
+            }
+        )
     
     with tab2:
         # Top 3 deals
@@ -418,12 +448,34 @@ def show_deal_activity(ma_df, inv_df):
     tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
     
     with tab1:
-        # Format Amount Raised column for display
+        # Format Amount Raised column for display with sortable numeric values
         inv_display = filtered_inv.copy()
+        
+        # Add numeric sort column
+        inv_display['_Amount_Numeric'] = inv_display['Amount Raised'].apply(
+            lambda x: float(x) if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else 0
+        )
+        
+        # Format for display
         inv_display['Amount Raised'] = inv_display['Amount Raised'].apply(
             lambda x: f"${x:,.0f}" if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else x
         )
-        st.dataframe(inv_display, use_container_width=True, height=400)
+        
+        # Display without the numeric column
+        display_cols = [col for col in inv_display.columns if not col.startswith('_')]
+        
+        st.dataframe(
+            inv_display[display_cols],
+            use_container_width=True, 
+            height=400,
+            column_config={
+                "Amount Raised": st.column_config.NumberColumn(
+                    "Amount Raised",
+                    help="Investment amount in USD",
+                    format="$%d",
+                )
+            }
+        )
     
     with tab2:
         # Top 3 deals
@@ -561,12 +613,31 @@ def show_manual_deal_entry(ma_df, inv_df):
             
             if submitted:
                 if company and acquirer and technology:
+                    # Parse deal value to standardized format
+                    def parse_deal_input(val):
+                        if not val or val.lower() == 'undisclosed':
+                            return 'Undisclosed'
+                        val_str = val.upper().replace('$', '').replace(',', '').strip()
+                        try:
+                            if 'B' in val_str:
+                                num = float(val_str.replace('B', ''))
+                                return f"${num * 1000000000:,.0f}"
+                            elif 'M' in val_str:
+                                num = float(val_str.replace('M', ''))
+                                return f"${num * 1000000:,.0f}"
+                            else:
+                                return f"${float(val_str):,.0f}"
+                        except:
+                            return 'Undisclosed'
+                    
+                    formatted_value = parse_deal_input(deal_value)
+                    
                     new_deal = pd.DataFrame({
                         'Company': [company],
                         'Acquirer': [acquirer],
                         'Deal Type (Merger / Acquisition)': [deal_type_ma],
                         'Technology/Description': [technology],
-                        'Deal Value': [deal_value if deal_value else 'Undisclosed'],
+                        'Deal Value': [formatted_value],
                         'Quarter': [quarter],
                         'Month': [month]
                     })
@@ -613,11 +684,30 @@ def show_manual_deal_entry(ma_df, inv_df):
             
             if submitted:
                 if company and technology:
+                    # Parse amount to numeric format (just the number, no formatting)
+                    def parse_amount_input(val):
+                        if not val or val.lower() == 'undisclosed':
+                            return 'Undisclosed'
+                        val_str = val.upper().replace('$', '').replace(',', '').strip()
+                        try:
+                            if 'B' in val_str:
+                                num = float(val_str.replace('B', ''))
+                                return int(num * 1000000000)
+                            elif 'M' in val_str:
+                                num = float(val_str.replace('M', ''))
+                                return int(num * 1000000)
+                            else:
+                                return int(float(val_str))
+                        except:
+                            return 'Undisclosed'
+                    
+                    formatted_amount = parse_amount_input(amount)
+                    
                     new_deal = pd.DataFrame({
                         'Company': [company],
                         'Funding type (VC / PE)': [funding_type],
                         'Technology/Description': [technology],
-                        'Amount Raised': [amount if amount else 'Undisclosed'],
+                        'Amount Raised': [formatted_amount],
                         'Lead Investors': [lead_investors if lead_investors else 'Undisclosed'],
                         'Quarter': [quarter],
                         'Month': [month]
