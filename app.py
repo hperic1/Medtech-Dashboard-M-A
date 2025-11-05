@@ -943,10 +943,10 @@ def show_ipo_activity(ipo_df):
         y=quarterly_data['Total_Value'],
         name='IPO Value',
         marker_color='#9B8FAC',  # Muted purple
-        text=[f'${v:,.0f}M' if v > 0 else 'No IPOs' for v in quarterly_data['Total_Value']],
+        text=[f'${v:,.0f}' if v > 0 else 'No IPOs' for v in quarterly_data['Total_Value']],
         textposition='outside',
         yaxis='y',
-        hovertemplate='<b>%{x}</b><br>IPO Value: $%{y:,.0f}M<br><extra></extra>'
+        hovertemplate='<b>%{x}</b><br>IPO Value: $%{y:,.0f}<br><extra></extra>'
     ))
     
     # Add line chart for IPO count
@@ -966,7 +966,7 @@ def show_ipo_activity(ipo_df):
     fig.update_layout(
         xaxis=dict(title='Quarter', showgrid=False),
         yaxis=dict(
-            title='Total IPO Value (USD Millions)',
+            title='Total IPO Value (USD)',
             side='left',
             showgrid=False,
             range=[0, max(quarterly_data['Total_Value']) * 1.3] if max(quarterly_data['Total_Value']) > 0 else [0, 100]
@@ -995,12 +995,12 @@ def show_ipo_activity(ipo_df):
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Total YTD IPO Value", f"${total_value:,.0f}M")
+        st.metric("Total YTD IPO Value", f"${total_value:,.0f}")
     with col2:
         st.metric("Total YTD IPOs", total_count)
     with col3:
         avg_value = total_value / total_count if total_count > 0 else 0
-        st.metric("Average IPO Size", f"${avg_value:,.0f}M")
+        st.metric("Average IPO Size", f"${avg_value:,.0f}")
     
     # Display detailed IPO list
     st.markdown("---")
@@ -1018,10 +1018,10 @@ def show_ipo_activity(ipo_df):
         technology = row['Technology']
         details = row['Investors/Deal Details']
         
-        # Format date
+        # Format date to show just month
         try:
             if pd.notna(date) and date != 'Undisclosed':
-                date_str = pd.to_datetime(date).strftime('%B %d, %Y')
+                date_str = pd.to_datetime(date).strftime('%B %Y')  # Just month and year
             else:
                 date_str = 'Date not provided'
         except:
@@ -1037,7 +1037,7 @@ def show_ipo_activity(ipo_df):
             with col1:
                 st.markdown(f"**IPO Value:** {amount_formatted}")
                 st.markdown(f"**Quarter:** {quarter}")
-                st.markdown(f"**Date:** {date_str}")
+                st.markdown(f"**Month:** {date_str}")  # Changed label from Date to Month
             
             with col2:
                 st.markdown("**Technology:**")
