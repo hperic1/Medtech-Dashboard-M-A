@@ -187,33 +187,10 @@ def format_currency(value):
 def create_quarterly_chart(df, value_col, title):
     """Create quarterly stacked bar chart with deal count overlay - NO GRIDLINES"""
     try:
-        # Function to parse values including text formats like "88 million"
-        def parse_value(v):
-            if v == 'Undisclosed' or pd.isna(v):
-                return 0
-            val_str = str(v).replace('$', '').replace(',', '').strip().upper()
-            try:
-                # Handle formats like "88 million", "2 billion"
-                if 'BILLION' in val_str:
-                    num = float(val_str.replace('BILLION', '').strip())
-                    return num * 1000000000
-                elif 'MILLION' in val_str:
-                    num = float(val_str.replace('MILLION', '').strip())
-                    return num * 1000000
-                elif 'B' in val_str:
-                    num = float(val_str.replace('B', '').strip())
-                    return num * 1000000000
-                elif 'M' in val_str:
-                    num = float(val_str.replace('M', '').strip())
-                    return num * 1000000
-                else:
-                    return float(val_str)
-            except:
-                return 0
-        
         # Prepare data
         quarterly_data = df.groupby('Quarter').agg({
-            value_col: lambda x: sum([parse_value(v) for v in x]),
+            value_col: lambda x: sum([float(str(v).replace('$', '').replace(',', '')) 
+                                     if v != 'Undisclosed' and pd.notna(v) else 0 for v in x]),
             'Company': 'count'
         }).reset_index()
         quarterly_data.columns = ['Quarter', 'Total_Value', 'Deal_Count']
@@ -235,7 +212,7 @@ def create_quarterly_chart(df, value_col, title):
             y=quarterly_data['Total_Value_Millions'],
             name='Deal Value',
             marker_color='#7FA8C9',  # Muted blue
-            text=[f"${v:,.0f}M" for v in quarterly_data['Total_Value_Millions']],  # Show in millions
+            text=[f"${v:,.0f}M" for v in quarterly_data['Total_Value_Millions']],
             textposition='outside',
             yaxis='y',
             hovertemplate='<b>%{x}</b><br>Deal Value: $%{y:,.0f}M<br><extra></extra>'
@@ -247,7 +224,7 @@ def create_quarterly_chart(df, value_col, title):
             y=quarterly_data['Deal_Count'],
             name='Deal Count',
             mode='lines+markers+text',
-            line=dict(color='#C9A77F', width=3),  # Muted orange
+            line=dict(color='#C9A77F', width=3),
             marker=dict(size=10),
             text=quarterly_data['Deal_Count'],
             textposition='top center',
@@ -262,15 +239,15 @@ def create_quarterly_chart(df, value_col, title):
             yaxis=dict(
                 title='Total Deal Value (USD Millions)',
                 side='left',
-                showgrid=False,  # Remove gridlines
-                range=[0, max(quarterly_data['Total_Value_Millions']) * 1.2]  # Extend y-axis by 20% for data labels
+                showgrid=False,
+                range=[0, max(quarterly_data['Total_Value_Millions']) * 1.2] if len(quarterly_data) > 0 else [0, 100]
             ),
             yaxis2=dict(
                 title='Number of Deals',
                 overlaying='y',
                 side='right',
-                showgrid=False,  # Remove gridlines
-                range=[0, max(quarterly_data['Deal_Count']) * 1.3]  # Extend y2-axis by 30% for data labels
+                showgrid=False,
+                range=[0, max(quarterly_data['Deal_Count']) * 1.3] if len(quarterly_data) > 0 else [0, 10]
             ),
             hovermode='x unified',
             showlegend=True,
@@ -283,7 +260,7 @@ def create_quarterly_chart(df, value_col, title):
             ),
             height=500,
             margin=dict(t=100, b=50, l=50, r=50),
-            plot_bgcolor='white',  # Clean white background
+            plot_bgcolor='white',
             paper_bgcolor='white'
         )
         
@@ -472,24 +449,10 @@ def show_deal_activity(ma_df, inv_df):
         # Add hidden numeric column for sorting - use -1 for Undisclosed so it goes to bottom
         def parse_to_numeric(val):
             if val == 'Undisclosed' or pd.isna(val):
-                return -1  # Changed from 0 to -1 to sort Undisclosed to bottom
-            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+                return -1
+            val_str = str(val).replace('$', '').replace(',', '').strip()
             try:
-                # Handle formats like "88 million", "2 billion"
-                if 'BILLION' in val_str:
-                    num = float(val_str.replace('BILLION', '').strip())
-                    return num * 1000000000
-                elif 'MILLION' in val_str:
-                    num = float(val_str.replace('MILLION', '').strip())
-                    return num * 1000000
-                elif 'B' in val_str:
-                    num = float(val_str.replace('B', '').strip())
-                    return num * 1000000000
-                elif 'M' in val_str:
-                    num = float(val_str.replace('M', '').strip())
-                    return num * 1000000
-                else:
-                    return float(val_str)
+                return float(val_str)
             except:
                 return -1
         
@@ -522,24 +485,9 @@ def show_deal_activity(ma_df, inv_df):
         def parse_deal_value(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+            val_str = str(val).replace('$', '').replace(',', '').strip()
             try:
-                # Handle formats like "88 million", "2 billion"
-                if 'BILLION' in val_str:
-                    num = float(val_str.replace('BILLION', '').strip())
-                    return num * 1000000000
-                elif 'MILLION' in val_str:
-                    num = float(val_str.replace('MILLION', '').strip())
-                    return num * 1000000
-                elif 'B' in val_str:
-                    num = float(val_str.replace('B', '').strip())
-                    return num * 1000000000
-                elif 'M' in val_str:
-                    num = float(val_str.replace('M', '').strip())
-                    return num * 1000000
-                else:
-                    # Value is already in actual dollars, not millions
-                    return float(val_str)
+                return float(val_str)
             except:
                 return 0
         
@@ -604,51 +552,15 @@ def show_deal_activity(ma_df, inv_df):
         
         # Add numeric sort column - use -1 for Undisclosed so it goes to bottom
         inv_display['_Amount_Numeric'] = inv_display['Amount Raised'].apply(
-            lambda x: parse_investment_amount(x)
+            lambda x: float(x) if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else -1
         )
-        
-        def parse_investment_amount(val):
-            if val == 'Undisclosed' or pd.isna(val):
-                return -1
-            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
-            try:
-                # Handle formats like "88 million", "2 billion"
-                if 'BILLION' in val_str:
-                    num = float(val_str.replace('BILLION', '').strip())
-                    return num * 1000000000
-                elif 'MILLION' in val_str:
-                    num = float(val_str.replace('MILLION', '').strip())
-                    return num * 1000000
-                elif 'B' in val_str:
-                    num = float(val_str.replace('B', '').strip())
-                    return num * 1000000000
-                elif 'M' in val_str:
-                    num = float(val_str.replace('M', '').strip())
-                    return num * 1000000
-                else:
-                    # Check if it's a plain number or has decimal
-                    if '.' in val_str or val_str.replace('-','').isdigit():
-                        return float(val_str)
-                    return -1
-            except:
-                return -1
         
         # Sort by Amount descending by default (highest amounts first, Undisclosed at bottom)
         inv_display = inv_display.sort_values('_Amount_Numeric', ascending=False)
         
-        # Format for display - handle both numeric and already-formatted values
-        def format_amount_for_display(val, numeric_val):
-            if val == 'Undisclosed' or pd.isna(val) or numeric_val == -1:
-                return val
-            # If numeric value is large, format it
-            if numeric_val >= 1000000:
-                return f"${numeric_val:,.0f}"
-            # Otherwise return original
-            return val
-        
-        inv_display['Amount Raised'] = inv_display.apply(
-            lambda row: format_amount_for_display(row['Amount Raised'], row['_Amount_Numeric']),
-            axis=1
+        # Format for display
+        inv_display['Amount Raised'] = inv_display['Amount Raised'].apply(
+            lambda x: f"${x:,.0f}" if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else x
         )
         
         # Display without the numeric column
@@ -670,28 +582,13 @@ def show_deal_activity(ma_df, inv_df):
         # Top 3 deals
         top_deals = filtered_inv.copy()
         
-        # Parse function - values in Excel may be in various formats
+        # Parse function - values in Excel are already actual dollars
         def parse_amount_value(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+            val_str = str(val).replace('$', '').replace(',', '').strip()
             try:
-                # Handle formats like "88 million", "2 billion"
-                if 'BILLION' in val_str:
-                    num = float(val_str.replace('BILLION', '').strip())
-                    return num * 1000000000
-                elif 'MILLION' in val_str:
-                    num = float(val_str.replace('MILLION', '').strip())
-                    return num * 1000000
-                elif 'B' in val_str:
-                    num = float(val_str.replace('B', '').strip())
-                    return num * 1000000000
-                elif 'M' in val_str:
-                    num = float(val_str.replace('M', '').strip())
-                    return num * 1000000
-                else:
-                    # Value is already in actual dollars, not millions
-                    return float(val_str)
+                return float(val_str)
             except:
                 return 0
         
@@ -727,27 +624,13 @@ def show_jp_morgan_summary(ma_df, inv_df):
     def calc_quarterly_stats(df, quarter, value_col):
         q_data = df[df['Quarter'] == quarter]
         
-        # Parse values - handle text formats like "88 million"
+        # Parse values
         def parse_value(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+            val_str = str(val).replace('$', '').replace(',', '').strip()
             try:
-                # Handle formats like "88 million", "2 billion"
-                if 'BILLION' in val_str:
-                    num = float(val_str.replace('BILLION', '').strip())
-                    return num * 1000000000
-                elif 'MILLION' in val_str:
-                    num = float(val_str.replace('MILLION', '').strip())
-                    return num * 1000000
-                elif 'B' in val_str:
-                    num = float(val_str.replace('B', '').strip())
-                    return num * 1000000000
-                elif 'M' in val_str:
-                    num = float(val_str.replace('M', '').strip())
-                    return num * 1000000
-                else:
-                    return float(val_str)
+                return float(val_str)
             except:
                 return 0
         
