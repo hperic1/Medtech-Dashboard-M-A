@@ -380,80 +380,6 @@ def create_jp_morgan_chart_by_category(category, color):
         st.error(f"Error creating {category} chart: {str(e)}")
         return None
 
-def create_comparison_sparkline(jp_value, beacon_value):
-    """Create a mini sparkline/bar graph showing comparison between JP Morgan and BeaconOne"""
-    try:
-        # Parse values to numbers
-        def parse_value(val):
-            if isinstance(val, str):
-                val = val.upper().replace('$', '').replace('B', '').replace('M', '').replace(',', '')
-                try:
-                    num = float(val)
-                    # If it was in billions, convert to millions for consistent comparison
-                    if 'B' in str(val).upper():
-                        return num * 1000
-                    return num
-                except:
-                    return 0
-            return float(val) if val else 0
-        
-        jp_num = parse_value(jp_value)
-        beacon_num = parse_value(beacon_value)
-        
-        # Create mini bar chart
-        fig = go.Figure()
-        
-        # Single horizontal bar showing both values
-        fig.add_trace(go.Bar(
-            y=['Comparison'],
-            x=[jp_num],
-            name='JPMorgan',
-            orientation='h',
-            marker=dict(color='rgba(127, 168, 201, 0.6)'),  # Semi-transparent muted blue
-            text=f'{jp_num:,.0f}',
-            textposition='inside',
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-        
-        fig.add_trace(go.Bar(
-            y=['Comparison'],
-            x=[beacon_num],
-            name='BeaconOne',
-            orientation='h',
-            marker=dict(color='rgba(201, 167, 127, 0.6)'),  # Semi-transparent muted orange
-            text=f'{beacon_num:,.0f}',
-            textposition='inside',
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-        
-        # Update layout for mini chart
-        max_val = max(jp_num, beacon_num)
-        fig.update_layout(
-            height=40,
-            margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(
-                showticklabels=False,
-                showgrid=False,
-                zeroline=False,
-                range=[0, max_val * 1.1]
-            ),
-            yaxis=dict(
-                showticklabels=False,
-                showgrid=False,
-                zeroline=False
-            ),
-            barmode='overlay',
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            showlegend=False
-        )
-        
-        return fig
-    except Exception as e:
-        return None
-
 # Main app
 def main():
     st.title("🥼 MedTech M&A & Venture Dashboard")
@@ -772,9 +698,9 @@ def show_jp_morgan_summary(ma_df, inv_df):
         st.markdown("")
         st.markdown("**Overarching Trend**: Late-stage venture rounds continue to dominate at $7.9B YTD, while early-stage funding remains selective as investors focus on companies with proven traction")
 
-    # Add comparison section with sparklines
+    # Add YTD comparison section
     st.markdown("---")
-    st.markdown("### JPMorgan vs BeaconOne Data - Quarterly Comparison")
+    st.markdown("### JPMorgan vs BeaconOne Data - YTD 2025 Comparison")
     
     # Load JP Morgan data for comparison
     jp_data = {}
@@ -799,265 +725,209 @@ def show_jp_morgan_summary(ma_df, inv_df):
                 }
             }[q]
     
-    # Create three columns for Q1, Q2, Q3
-    q1_col, q2_col, q3_col = st.columns(3)
+    # Calculate YTD totals
+    jp_ma_ytd_value = sum([jp_data['Q1']['ma']['value'], jp_data['Q2']['ma']['value'], jp_data['Q3']['ma']['value']])
+    jp_ma_ytd_count = sum([jp_data['Q1']['ma']['count'], jp_data['Q2']['ma']['count'], jp_data['Q3']['ma']['count']])
+    jp_vc_ytd_value = sum([jp_data['Q1']['venture']['value'], jp_data['Q2']['venture']['value'], jp_data['Q3']['venture']['value']])
+    jp_vc_ytd_count = sum([jp_data['Q1']['venture']['count'], jp_data['Q2']['venture']['count'], jp_data['Q3']['venture']['count']])
     
-    # Muted color palette
-    colors = {
-        'ma_count': '#8FA8C0',      # Muted blue
-        'ma_value': '#7A93AC',      # Darker muted blue
-        'inv_count': '#A8C090',     # Muted green
-        'inv_value': '#8FA87A'      # Darker muted green
-    }
+    beacon_ma_ytd_value = sum([beacon_stats['Q1']['ma_value_raw'], beacon_stats['Q2']['ma_value_raw'], beacon_stats['Q3']['ma_value_raw']]) / 1000000
+    beacon_ma_ytd_count = sum([beacon_stats['Q1']['ma_count'], beacon_stats['Q2']['ma_count'], beacon_stats['Q3']['ma_count']])
+    beacon_vc_ytd_value = sum([beacon_stats['Q1']['inv_value_raw'], beacon_stats['Q2']['inv_value_raw'], beacon_stats['Q3']['inv_value_raw']]) / 1000000
+    beacon_vc_ytd_count = sum([beacon_stats['Q1']['inv_count'], beacon_stats['Q2']['inv_count'], beacon_stats['Q3']['inv_count']])
     
-    with q1_col:
-        st.markdown("#### Q1 2025")
-        
-        # M&A Deal Count Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['ma_count']}; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>M&A Deal Count</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{jp_data['Q1']['ma']['count']}</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q1']['ma_count']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(jp_data['Q1']['ma']['count'], beacon_stats['Q1']['ma_count'])
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # M&A Deal Value Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['ma_value']}; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>M&A Deal Value</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>$9.2B</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q1']['ma_value']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(9200, beacon_stats['Q1']['ma_value_raw'] / 1000000)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # Investment Count Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['inv_count']}; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>Investment Count</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{jp_data['Q1']['venture']['count']}</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q1']['inv_count']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(jp_data['Q1']['venture']['count'], beacon_stats['Q1']['inv_count'])
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # Investment Value Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['inv_value']}; padding: 15px; border-radius: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>Investment Value</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>$3.7B</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q1']['inv_value']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(3700, beacon_stats['Q1']['inv_value_raw'] / 1000000)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    # Create two columns for M&A and Venture comparison charts
+    col1, col2 = st.columns(2)
     
-    with q2_col:
-        st.markdown("#### Q2 2025")
+    with col1:
+        st.markdown("#### M&A Activity - YTD Comparison")
         
-        # M&A Deal Count Card with sparkline
+        # Create comparison chart for M&A
+        fig_ma_comp = go.Figure()
+        
+        # JPMorgan bars
+        fig_ma_comp.add_trace(go.Bar(
+            name='JPMorgan',
+            x=['Deal Value', 'Deal Count'],
+            y=[jp_ma_ytd_value, jp_ma_ytd_count * 200],  # Scale count for visibility
+            marker_color='#7FA8C9',
+            text=[f'${jp_ma_ytd_value/1000:.1f}B', f'{jp_ma_ytd_count} deals'],
+            textposition='outside',
+            yaxis='y',
+            hovertemplate='<b>JPMorgan</b><br>%{x}: %{text}<extra></extra>'
+        ))
+        
+        # BeaconOne bars
+        fig_ma_comp.add_trace(go.Bar(
+            name='BeaconOne',
+            x=['Deal Value', 'Deal Count'],
+            y=[beacon_ma_ytd_value, beacon_ma_ytd_count * 200],  # Scale count for visibility
+            marker_color='#A8C9D1',
+            text=[f'${beacon_ma_ytd_value/1000:.1f}B', f'{int(beacon_ma_ytd_count)} deals'],
+            textposition='outside',
+            yaxis='y',
+            hovertemplate='<b>BeaconOne</b><br>%{x}: %{text}<extra></extra>'
+        ))
+        
+        # Add line overlay for deal counts
+        fig_ma_comp.add_trace(go.Scatter(
+            name='Deal Count (Line)',
+            x=['Deal Value', 'Deal Count'],
+            y=[jp_ma_ytd_count, jp_ma_ytd_count],
+            mode='lines+markers',
+            line=dict(color='#7FA8C9', width=3, dash='dot'),
+            marker=dict(size=10),
+            yaxis='y2',
+            showlegend=False,
+            hovertemplate='<b>JPMorgan</b><br>Deal Count: %{y}<extra></extra>'
+        ))
+        
+        fig_ma_comp.add_trace(go.Scatter(
+            name='Deal Count (Line)',
+            x=['Deal Value', 'Deal Count'],
+            y=[beacon_ma_ytd_count, beacon_ma_ytd_count],
+            mode='lines+markers',
+            line=dict(color='#A8C9D1', width=3, dash='dot'),
+            marker=dict(size=10),
+            yaxis='y2',
+            showlegend=False,
+            hovertemplate='<b>BeaconOne</b><br>Deal Count: %{y}<extra></extra>'
+        ))
+        
+        fig_ma_comp.update_layout(
+            barmode='group',
+            height=400,
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(
+                title='Deal Value ($M)',
+                showgrid=False,
+                side='left'
+            ),
+            yaxis2=dict(
+                title='Deal Count',
+                showgrid=False,
+                overlaying='y',
+                side='right'
+            ),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            margin=dict(t=60, b=50, l=50, r=50)
+        )
+        
+        st.plotly_chart(fig_ma_comp, use_container_width=True)
+        
+        # Summary metrics below chart
         st.markdown(f"""
-        <div style='background-color: {colors['ma_count']}; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>M&A Deal Count</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{jp_data['Q2']['ma']['count']}</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q2']['ma_count']}</p>
-                </div>
+        <div style='display: flex; justify-content: space-around; margin-top: 15px;'>
+            <div style='text-align: center; background-color: #F0F4F7; padding: 15px; border-radius: 8px; flex: 1; margin: 0 5px;'>
+                <p style='margin: 0; font-size: 12px; color: #666;'>JPMorgan YTD</p>
+                <p style='margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #7FA8C9;'>${jp_ma_ytd_value/1000:.1f}B</p>
+                <p style='margin: 0; font-size: 14px; color: #888;'>{jp_ma_ytd_count} deals</p>
+            </div>
+            <div style='text-align: center; background-color: #F0F4F7; padding: 15px; border-radius: 8px; flex: 1; margin: 0 5px;'>
+                <p style='margin: 0; font-size: 12px; color: #666;'>BeaconOne YTD</p>
+                <p style='margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #A8C9D1;'>${beacon_ma_ytd_value/1000:.1f}B</p>
+                <p style='margin: 0; font-size: 14px; color: #888;'>{int(beacon_ma_ytd_count)} deals</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(jp_data['Q2']['ma']['count'], beacon_stats['Q2']['ma_count'])
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # M&A Deal Value Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['ma_value']}; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>M&A Deal Value</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>$2.1B</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q2']['ma_value']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(2100, beacon_stats['Q2']['ma_value_raw'] / 1000000)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # Investment Count Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['inv_count']}; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>Investment Count</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{jp_data['Q2']['venture']['count']}</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q2']['inv_count']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(jp_data['Q2']['venture']['count'], beacon_stats['Q2']['inv_count'])
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # Investment Value Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['inv_value']}; padding: 15px; border-radius: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>Investment Value</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>$2.6B</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q2']['inv_value']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(2600, beacon_stats['Q2']['inv_value_raw'] / 1000000)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     
-    with q3_col:
-        st.markdown("#### Q3 2025")
+    with col2:
+        st.markdown("#### Venture Investment - YTD Comparison")
         
-        # M&A Deal Count Card with sparkline
+        # Create comparison chart for Venture
+        fig_vc_comp = go.Figure()
+        
+        # JPMorgan bars
+        fig_vc_comp.add_trace(go.Bar(
+            name='JPMorgan',
+            x=['Deal Value', 'Deal Count'],
+            y=[jp_vc_ytd_value, jp_vc_ytd_count * 30],  # Scale count for visibility
+            marker_color='#C9A77F',
+            text=[f'${jp_vc_ytd_value/1000:.1f}B', f'{jp_vc_ytd_count} deals'],
+            textposition='outside',
+            yaxis='y',
+            hovertemplate='<b>JPMorgan</b><br>%{x}: %{text}<extra></extra>'
+        ))
+        
+        # BeaconOne bars
+        fig_vc_comp.add_trace(go.Bar(
+            name='BeaconOne',
+            x=['Deal Value', 'Deal Count'],
+            y=[beacon_vc_ytd_value, beacon_vc_ytd_count * 30],  # Scale count for visibility
+            marker_color='#D9C9A8',
+            text=[f'${beacon_vc_ytd_value/1000:.1f}B', f'{int(beacon_vc_ytd_count)} deals'],
+            textposition='outside',
+            yaxis='y',
+            hovertemplate='<b>BeaconOne</b><br>%{x}: %{text}<extra></extra>'
+        ))
+        
+        # Add line overlay for deal counts
+        fig_vc_comp.add_trace(go.Scatter(
+            name='Deal Count (Line)',
+            x=['Deal Value', 'Deal Count'],
+            y=[jp_vc_ytd_count, jp_vc_ytd_count],
+            mode='lines+markers',
+            line=dict(color='#C9A77F', width=3, dash='dot'),
+            marker=dict(size=10),
+            yaxis='y2',
+            showlegend=False,
+            hovertemplate='<b>JPMorgan</b><br>Deal Count: %{y}<extra></extra>'
+        ))
+        
+        fig_vc_comp.add_trace(go.Scatter(
+            name='Deal Count (Line)',
+            x=['Deal Value', 'Deal Count'],
+            y=[beacon_vc_ytd_count, beacon_vc_ytd_count],
+            mode='lines+markers',
+            line=dict(color='#D9C9A8', width=3, dash='dot'),
+            marker=dict(size=10),
+            yaxis='y2',
+            showlegend=False,
+            hovertemplate='<b>BeaconOne</b><br>Deal Count: %{y}<extra></extra>'
+        ))
+        
+        fig_vc_comp.update_layout(
+            barmode='group',
+            height=400,
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(
+                title='Deal Value ($M)',
+                showgrid=False,
+                side='left'
+            ),
+            yaxis2=dict(
+                title='Deal Count',
+                showgrid=False,
+                overlaying='y',
+                side='right'
+            ),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            margin=dict(t=60, b=50, l=50, r=50)
+        )
+        
+        st.plotly_chart(fig_vc_comp, use_container_width=True)
+        
+        # Summary metrics below chart
         st.markdown(f"""
-        <div style='background-color: #9B8FAC; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>M&A Deal Count</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{jp_data['Q3']['ma']['count']}</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q3']['ma_count']}</p>
-                </div>
+        <div style='display: flex; justify-content: space-around; margin-top: 15px;'>
+            <div style='text-align: center; background-color: #F9F7F4; padding: 15px; border-radius: 8px; flex: 1; margin: 0 5px;'>
+                <p style='margin: 0; font-size: 12px; color: #666;'>JPMorgan YTD</p>
+                <p style='margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #C9A77F;'>${jp_vc_ytd_value/1000:.1f}B</p>
+                <p style='margin: 0; font-size: 14px; color: #888;'>{jp_vc_ytd_count} deals</p>
+            </div>
+            <div style='text-align: center; background-color: #F9F7F4; padding: 15px; border-radius: 8px; flex: 1; margin: 0 5px;'>
+                <p style='margin: 0; font-size: 12px; color: #666;'>BeaconOne YTD</p>
+                <p style='margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #D9C9A8;'>${beacon_vc_ytd_value/1000:.1f}B</p>
+                <p style='margin: 0; font-size: 14px; color: #888;'>{int(beacon_vc_ytd_count)} deals</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(jp_data['Q3']['ma']['count'], beacon_stats['Q3']['ma_count'])
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # M&A Deal Value Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: #8A7A98; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>M&A Deal Value</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>$21.7B</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q3']['ma_value']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(21700, beacon_stats['Q3']['ma_value_raw'] / 1000000)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # Investment Count Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['inv_count']}; padding: 15px; border-radius: 8px; margin-bottom: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>Investment Count</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{jp_data['Q3']['venture']['count']}</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q3']['inv_count']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(jp_data['Q3']['venture']['count'], beacon_stats['Q3']['inv_count'])
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # Investment Value Card with sparkline
-        st.markdown(f"""
-        <div style='background-color: {colors['inv_value']}; padding: 15px; border-radius: 8px;'>
-            <p style='color: white; margin: 0; font-size: 11px; opacity: 0.9;'>Investment Value</p>
-            <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;'>
-                <div>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>JPMorgan</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>$2.9B</p>
-                </div>
-                <div style='text-align: right;'>
-                    <p style='color: white; margin: 0; font-size: 9px; opacity: 0.7;'>BeaconOne</p>
-                    <p style='color: white; margin: 0; font-size: 28px; font-weight: bold;'>{beacon_stats['Q3']['inv_value']}</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        fig = create_comparison_sparkline(2900, beacon_stats['Q3']['inv_value_raw'] / 1000000)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 def show_data_management(ma_df, inv_df):
     """Data management page for adding deals and uploading JP Morgan reports"""
