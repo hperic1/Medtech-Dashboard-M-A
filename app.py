@@ -8,7 +8,7 @@ import json
 
 # Page configuration
 st.set_page_config(
-    page_title="MedTech M&A & Venture Dashboard",
+    page_title="MedTech M&A & Investment Activity Dashboard",
     page_icon="🥼",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -382,7 +382,7 @@ def create_jp_morgan_chart_by_category(category, color):
 
 # Main app
 def main():
-    st.title("🥼 MedTech M&A & Venture Dashboard")
+    st.title("🥼 MedTech M&A & Investment Activity Dashboard")
     
     # Load data
     ma_df, inv_df = load_data()
@@ -742,56 +742,31 @@ def show_jp_morgan_summary(ma_df, inv_df):
     with col1:
         st.markdown("#### M&A Activity - YTD Comparison")
         
-        # Create comparison chart for M&A
+        # Create simplified comparison chart for M&A (deal value only)
         fig_ma_comp = go.Figure()
         
-        # JPMorgan bars
+        # JPMorgan bar
         fig_ma_comp.add_trace(go.Bar(
             name='JPMorgan',
-            x=['Deal Value', 'Deal Count'],
-            y=[jp_ma_ytd_value, jp_ma_ytd_count * 200],  # Scale count for visibility
+            x=['Deal Value'],
+            y=[jp_ma_ytd_value],
             marker_color='#7FA8C9',
-            text=[f'${jp_ma_ytd_value/1000:.1f}B', f'{jp_ma_ytd_count} deals'],
+            text=[f'${jp_ma_ytd_value/1000:.1f}B'],
             textposition='outside',
-            yaxis='y',
-            hovertemplate='<b>JPMorgan</b><br>%{x}: %{text}<extra></extra>'
+            width=0.4,
+            hovertemplate='<b>JPMorgan</b><br>Deal Value: $%{y:.0f}M<extra></extra>'
         ))
         
-        # BeaconOne bars
+        # BeaconOne bar
         fig_ma_comp.add_trace(go.Bar(
             name='BeaconOne',
-            x=['Deal Value', 'Deal Count'],
-            y=[beacon_ma_ytd_value, beacon_ma_ytd_count * 200],  # Scale count for visibility
+            x=['Deal Value'],
+            y=[beacon_ma_ytd_value],
             marker_color='#A8C9D1',
-            text=[f'${beacon_ma_ytd_value/1000:.1f}B', f'{int(beacon_ma_ytd_count)} deals'],
+            text=[f'${beacon_ma_ytd_value/1000:.1f}B'],
             textposition='outside',
-            yaxis='y',
-            hovertemplate='<b>BeaconOne</b><br>%{x}: %{text}<extra></extra>'
-        ))
-        
-        # Add line overlay for deal counts
-        fig_ma_comp.add_trace(go.Scatter(
-            name='Deal Count (Line)',
-            x=['Deal Value', 'Deal Count'],
-            y=[jp_ma_ytd_count, jp_ma_ytd_count],
-            mode='lines+markers',
-            line=dict(color='#7FA8C9', width=3, dash='dot'),
-            marker=dict(size=10),
-            yaxis='y2',
-            showlegend=False,
-            hovertemplate='<b>JPMorgan</b><br>Deal Count: %{y}<extra></extra>'
-        ))
-        
-        fig_ma_comp.add_trace(go.Scatter(
-            name='Deal Count (Line)',
-            x=['Deal Value', 'Deal Count'],
-            y=[beacon_ma_ytd_count, beacon_ma_ytd_count],
-            mode='lines+markers',
-            line=dict(color='#A8C9D1', width=3, dash='dot'),
-            marker=dict(size=10),
-            yaxis='y2',
-            showlegend=False,
-            hovertemplate='<b>BeaconOne</b><br>Deal Count: %{y}<extra></extra>'
+            width=0.4,
+            hovertemplate='<b>BeaconOne</b><br>Deal Value: $%{y:.0f}M<extra></extra>'
         ))
         
         fig_ma_comp.update_layout(
@@ -799,17 +774,11 @@ def show_jp_morgan_summary(ma_df, inv_df):
             height=400,
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            xaxis=dict(showgrid=False),
+            xaxis=dict(showgrid=False, title=''),
             yaxis=dict(
                 title='Deal Value ($M)',
                 showgrid=False,
-                side='left'
-            ),
-            yaxis2=dict(
-                title='Deal Count',
-                showgrid=False,
-                overlaying='y',
-                side='right'
+                range=[0, max(jp_ma_ytd_value, beacon_ma_ytd_value) * 1.2]
             ),
             plot_bgcolor='white',
             paper_bgcolor='white',
@@ -818,18 +787,18 @@ def show_jp_morgan_summary(ma_df, inv_df):
         
         st.plotly_chart(fig_ma_comp, use_container_width=True)
         
-        # Summary metrics below chart
+        # Summary metrics below chart with both value and count
         st.markdown(f"""
         <div style='display: flex; justify-content: space-around; margin-top: 15px;'>
-            <div style='text-align: center; background-color: #F0F4F7; padding: 15px; border-radius: 8px; flex: 1; margin: 0 5px;'>
-                <p style='margin: 0; font-size: 12px; color: #666;'>JPMorgan YTD</p>
-                <p style='margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #7FA8C9;'>${jp_ma_ytd_value/1000:.1f}B</p>
-                <p style='margin: 0; font-size: 14px; color: #888;'>{jp_ma_ytd_count} deals</p>
+            <div style='text-align: center; background-color: #F0F4F7; padding: 20px; border-radius: 8px; flex: 1; margin: 0 5px;'>
+                <p style='margin: 0; font-size: 12px; color: #666; font-weight: 500;'>JPMorgan YTD</p>
+                <p style='margin: 8px 0 0 0; font-size: 32px; font-weight: bold; color: #7FA8C9;'>${jp_ma_ytd_value/1000:.1f}B</p>
+                <p style='margin: 5px 0 0 0; font-size: 16px; color: #888;'>{jp_ma_ytd_count} deals</p>
             </div>
-            <div style='text-align: center; background-color: #F0F4F7; padding: 15px; border-radius: 8px; flex: 1; margin: 0 5px;'>
-                <p style='margin: 0; font-size: 12px; color: #666;'>BeaconOne YTD</p>
-                <p style='margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #A8C9D1;'>${beacon_ma_ytd_value/1000:.1f}B</p>
-                <p style='margin: 0; font-size: 14px; color: #888;'>{int(beacon_ma_ytd_count)} deals</p>
+            <div style='text-align: center; background-color: #F0F4F7; padding: 20px; border-radius: 8px; flex: 1; margin: 0 5px;'>
+                <p style='margin: 0; font-size: 12px; color: #666; font-weight: 500;'>BeaconOne YTD</p>
+                <p style='margin: 8px 0 0 0; font-size: 32px; font-weight: bold; color: #A8C9D1;'>${beacon_ma_ytd_value/1000:.1f}B</p>
+                <p style='margin: 5px 0 0 0; font-size: 16px; color: #888;'>{int(beacon_ma_ytd_count)} deals</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -837,56 +806,31 @@ def show_jp_morgan_summary(ma_df, inv_df):
     with col2:
         st.markdown("#### Venture Investment - YTD Comparison")
         
-        # Create comparison chart for Venture
+        # Create simplified comparison chart for Venture (deal value only)
         fig_vc_comp = go.Figure()
         
-        # JPMorgan bars
+        # JPMorgan bar
         fig_vc_comp.add_trace(go.Bar(
             name='JPMorgan',
-            x=['Deal Value', 'Deal Count'],
-            y=[jp_vc_ytd_value, jp_vc_ytd_count * 30],  # Scale count for visibility
+            x=['Deal Value'],
+            y=[jp_vc_ytd_value],
             marker_color='#C9A77F',
-            text=[f'${jp_vc_ytd_value/1000:.1f}B', f'{jp_vc_ytd_count} deals'],
+            text=[f'${jp_vc_ytd_value/1000:.1f}B'],
             textposition='outside',
-            yaxis='y',
-            hovertemplate='<b>JPMorgan</b><br>%{x}: %{text}<extra></extra>'
+            width=0.4,
+            hovertemplate='<b>JPMorgan</b><br>Deal Value: $%{y:.0f}M<extra></extra>'
         ))
         
-        # BeaconOne bars
+        # BeaconOne bar
         fig_vc_comp.add_trace(go.Bar(
             name='BeaconOne',
-            x=['Deal Value', 'Deal Count'],
-            y=[beacon_vc_ytd_value, beacon_vc_ytd_count * 30],  # Scale count for visibility
+            x=['Deal Value'],
+            y=[beacon_vc_ytd_value],
             marker_color='#D9C9A8',
-            text=[f'${beacon_vc_ytd_value/1000:.1f}B', f'{int(beacon_vc_ytd_count)} deals'],
+            text=[f'${beacon_vc_ytd_value/1000:.1f}B'],
             textposition='outside',
-            yaxis='y',
-            hovertemplate='<b>BeaconOne</b><br>%{x}: %{text}<extra></extra>'
-        ))
-        
-        # Add line overlay for deal counts
-        fig_vc_comp.add_trace(go.Scatter(
-            name='Deal Count (Line)',
-            x=['Deal Value', 'Deal Count'],
-            y=[jp_vc_ytd_count, jp_vc_ytd_count],
-            mode='lines+markers',
-            line=dict(color='#C9A77F', width=3, dash='dot'),
-            marker=dict(size=10),
-            yaxis='y2',
-            showlegend=False,
-            hovertemplate='<b>JPMorgan</b><br>Deal Count: %{y}<extra></extra>'
-        ))
-        
-        fig_vc_comp.add_trace(go.Scatter(
-            name='Deal Count (Line)',
-            x=['Deal Value', 'Deal Count'],
-            y=[beacon_vc_ytd_count, beacon_vc_ytd_count],
-            mode='lines+markers',
-            line=dict(color='#D9C9A8', width=3, dash='dot'),
-            marker=dict(size=10),
-            yaxis='y2',
-            showlegend=False,
-            hovertemplate='<b>BeaconOne</b><br>Deal Count: %{y}<extra></extra>'
+            width=0.4,
+            hovertemplate='<b>BeaconOne</b><br>Deal Value: $%{y:.0f}M<extra></extra>'
         ))
         
         fig_vc_comp.update_layout(
@@ -894,17 +838,11 @@ def show_jp_morgan_summary(ma_df, inv_df):
             height=400,
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            xaxis=dict(showgrid=False),
+            xaxis=dict(showgrid=False, title=''),
             yaxis=dict(
                 title='Deal Value ($M)',
                 showgrid=False,
-                side='left'
-            ),
-            yaxis2=dict(
-                title='Deal Count',
-                showgrid=False,
-                overlaying='y',
-                side='right'
+                range=[0, max(jp_vc_ytd_value, beacon_vc_ytd_value) * 1.2]
             ),
             plot_bgcolor='white',
             paper_bgcolor='white',
@@ -913,18 +851,18 @@ def show_jp_morgan_summary(ma_df, inv_df):
         
         st.plotly_chart(fig_vc_comp, use_container_width=True)
         
-        # Summary metrics below chart
+        # Summary metrics below chart with both value and count
         st.markdown(f"""
         <div style='display: flex; justify-content: space-around; margin-top: 15px;'>
-            <div style='text-align: center; background-color: #F9F7F4; padding: 15px; border-radius: 8px; flex: 1; margin: 0 5px;'>
-                <p style='margin: 0; font-size: 12px; color: #666;'>JPMorgan YTD</p>
-                <p style='margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #C9A77F;'>${jp_vc_ytd_value/1000:.1f}B</p>
-                <p style='margin: 0; font-size: 14px; color: #888;'>{jp_vc_ytd_count} deals</p>
+            <div style='text-align: center; background-color: #F9F7F4; padding: 20px; border-radius: 8px; flex: 1; margin: 0 5px;'>
+                <p style='margin: 0; font-size: 12px; color: #666; font-weight: 500;'>JPMorgan YTD</p>
+                <p style='margin: 8px 0 0 0; font-size: 32px; font-weight: bold; color: #C9A77F;'>${jp_vc_ytd_value/1000:.1f}B</p>
+                <p style='margin: 5px 0 0 0; font-size: 16px; color: #888;'>{jp_vc_ytd_count} deals</p>
             </div>
-            <div style='text-align: center; background-color: #F9F7F4; padding: 15px; border-radius: 8px; flex: 1; margin: 0 5px;'>
-                <p style='margin: 0; font-size: 12px; color: #666;'>BeaconOne YTD</p>
-                <p style='margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #D9C9A8;'>${beacon_vc_ytd_value/1000:.1f}B</p>
-                <p style='margin: 0; font-size: 14px; color: #888;'>{int(beacon_vc_ytd_count)} deals</p>
+            <div style='text-align: center; background-color: #F9F7F4; padding: 20px; border-radius: 8px; flex: 1; margin: 0 5px;'>
+                <p style='margin: 0; font-size: 12px; color: #666; font-weight: 500;'>BeaconOne YTD</p>
+                <p style='margin: 8px 0 0 0; font-size: 32px; font-weight: bold; color: #D9C9A8;'>${beacon_vc_ytd_value/1000:.1f}B</p>
+                <p style='margin: 5px 0 0 0; font-size: 16px; color: #888;'>{int(beacon_vc_ytd_count)} deals</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
