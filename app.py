@@ -183,14 +183,58 @@ def format_currency(value):
     except:
         return str(value)
 
+def parse_currency_to_number(val):
+    """
+    Universal currency parser that handles ALL formats and returns whole number.
+    Handles: $350,000,000 | 120000000 | 88 million | $2.5B | Undisclosed
+    Returns: Whole number (e.g., 350000000) or 0 for Undisclosed
+    """
+    if val == 'Undisclosed' or pd.isna(val):
+        return 0
+    
+    val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+    
+    try:
+        # Handle "88 MILLION", "2 BILLION" text formats
+        if 'BILLION' in val_str:
+            num_str = val_str.replace('BILLION', '').strip()
+            num = float(num_str)
+            return int(num * 1000000000)
+        elif 'MILLION' in val_str:
+            num_str = val_str.replace('MILLION', '').strip()
+            num = float(num_str)
+            return int(num * 1000000)
+        # Handle "2.5B", "88M" abbreviated formats
+        elif 'B' in val_str:
+            num_str = val_str.replace('B', '').strip()
+            num = float(num_str)
+            return int(num * 1000000000)
+        elif 'M' in val_str:
+            num_str = val_str.replace('M', '').strip()
+            num = float(num_str)
+            return int(num * 1000000)
+        # Handle plain numbers "120000000" or "350000000"
+        else:
+            return int(float(val_str))
+    except (ValueError, AttributeError):
+        return 0
+
+def format_whole_number(num):
+    """
+    Format number as whole number with commas.
+    17500000000 → $17,500,000,000
+    """
+    if num == 0 or num < 0:
+        return 'Undisclosed'
+    return f"${num:,}"
+
 
 def create_quarterly_chart(df, value_col, title):
     """Create quarterly stacked bar chart with deal count overlay - NO GRIDLINES"""
     try:
-        # Prepare data
+        # Prepare data using universal parser
         quarterly_data = df.groupby('Quarter').agg({
-            value_col: lambda x: sum([float(str(v).replace('$', '').replace(',', '')) 
-                                     if v != 'Undisclosed' and pd.notna(v) else 0 for v in x]),
+            value_col: lambda x: sum([parse_currency_to_number(v) for v in x]),
             'Company': 'count'
         }).reset_index()
         quarterly_data.columns = ['Quarter', 'Total_Value', 'Deal_Count']
@@ -203,19 +247,18 @@ def create_quarterly_chart(df, value_col, title):
         # Create figure
         fig = go.Figure()
         
-        # Convert to millions for proper display
-        quarterly_data['Total_Value_Millions'] = quarterly_data['Total_Value'] / 1000000
+        # Keep values as whole numbers (already in dollars)
         
         # Add bar chart for deal values
         fig.add_trace(go.Bar(
             x=quarterly_data['Quarter'],
-            y=quarterly_data['Total_Value_Millions'],
+            y=quarterly_data['Total_Value'],
             name='Deal Value',
             marker_color='#7FA8C9',  # Muted blue
-            text=[f"${v:,.0f}M" for v in quarterly_data['Total_Value_Millions']],
+            text=[f"${v:,.0f}" for v in quarterly_data['Total_Value']],  # Show with commas
             textposition='outside',
             yaxis='y',
-            hovertemplate='<b>%{x}</b><br>Deal Value: $%{y:,.0f}M<br><extra></extra>'
+            hovertemplate='<b>%{x}</b><br>Deal Value: $%{y:,.0f}<br><extra></extra>'
         ))
         
         # Add line chart for deal count
@@ -237,10 +280,10 @@ def create_quarterly_chart(df, value_col, title):
             title=title,
             xaxis=dict(title='Quarter', showgrid=False),
             yaxis=dict(
-                title='Total Deal Value (USD Millions)',
+                title='Total Deal Value (USD)',
                 side='left',
                 showgrid=False,
-                range=[0, max(quarterly_data['Total_Value_Millions']) * 1.2] if len(quarterly_data) > 0 else [0, 100]
+                range=[0, max(quarterly_data['Total_Value']) * 1.2] if len(quarterly_data) > 0 and max(quarterly_data['Total_Value']) > 0 else [0, 100]
             ),
             yaxis2=dict(
                 title='Number of Deals',
@@ -453,13 +496,8 @@ def show_deal_activity(ma_df, inv_df):
         
         # Add hidden numeric column for sorting - use -1 for Undisclosed so it goes to bottom
         def parse_to_numeric(val):
-            if val == 'Undisclosed' or pd.isna(val):
-                return -1
-            val_str = str(val).replace('$', '').replace(',', '').strip()
-            try:
-                return float(val_str)
-            except:
-                return -1
+            num = parse_currency_to_number(val)
+            return num if num > 0 else -1
         
         # Create a numeric sort column
         ma_display['_Deal_Value_Numeric'] = ma_display['Deal Value'].apply(parse_to_numeric)
@@ -470,14 +508,21 @@ def show_deal_activity(ma_df, inv_df):
         # Display without the numeric column (it's just for sorting)
         display_cols = [col for col in ma_display.columns if not col.startswith('_')]
         
+        # Format Deal Value column for display as whole numbers
+        ma_display_formatted = ma_display.copy()
+        ma_display_formatted['Deal Value'] = ma_display_formatted.apply(
+            lambda row: format_whole_number(row['_Deal_Value_Numeric']) if row['_Deal_Value_Numeric'] > 0 else 'Undisclosed',
+            axis=1
+        )
+        
         st.dataframe(
-            ma_display[display_cols], 
+            ma_display_formatted[display_cols], 
             use_container_width=True, 
             height=400,
             column_config={
                 "Deal Value": st.column_config.TextColumn(
                     "Deal Value",
-                    help="Deal value in USD",
+                    help="Deal value in USD (whole numbers)",
                 )
             }
         )
@@ -486,28 +531,19 @@ def show_deal_activity(ma_df, inv_df):
         # Top 3 deals
         top_deals = filtered_ma.copy()
         
-        # Parse function - values in Excel are already actual dollars like "$350,000,000"
-        def parse_deal_value(val):
-            if val == 'Undisclosed' or pd.isna(val):
-                return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip()
-            try:
-                return float(val_str)
-            except:
-                return 0
-        
-        top_deals['Deal_Value_Numeric'] = top_deals['Deal Value'].apply(parse_deal_value)
+        # Use universal parser
+        top_deals['Deal_Value_Numeric'] = top_deals['Deal Value'].apply(parse_currency_to_number)
         top_deals = top_deals.nlargest(3, 'Deal_Value_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Value is already in actual dollars, just format with commas
-            formatted_value = str(row['Deal Value']) if row['Deal Value'] != 'Undisclosed' else 'Undisclosed'
+            # Format as whole number
+            formatted_value = format_whole_number(row['Deal_Value_Numeric'])
             
             # Get deal type verb
             deal_type = row['Deal Type (Merger / Acquisition)']
             verb = "merged with" if deal_type == "Merger" else "acquired"
             
-            # Display with value directly from Excel (already formatted) - muted color
+            # Display with whole number format
             st.markdown(f"**{row['Acquirer']} {verb} {row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #7FA8C9;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
@@ -560,17 +596,18 @@ def show_deal_activity(ma_df, inv_df):
         # Format Amount Raised column for display with sortable numeric values
         inv_display = filtered_inv.copy()
         
-        # Add numeric sort column - use -1 for Undisclosed so it goes to bottom
-        inv_display['_Amount_Numeric'] = inv_display['Amount Raised'].apply(
-            lambda x: float(x) if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else -1
-        )
+        # Add numeric sort column using universal parser
+        inv_display['_Amount_Numeric'] = inv_display['Amount Raised'].apply(parse_currency_to_number)
+        
+        # Replace -1 with -1 for Undisclosed (sorts to bottom)
+        inv_display.loc[inv_display['_Amount_Numeric'] == 0, '_Amount_Numeric'] = -1
         
         # Sort by Amount descending by default (highest amounts first, Undisclosed at bottom)
         inv_display = inv_display.sort_values('_Amount_Numeric', ascending=False)
         
-        # Format for display
-        inv_display['Amount Raised'] = inv_display['Amount Raised'].apply(
-            lambda x: f"${x:,.0f}" if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else x
+        # Format for display as whole numbers
+        inv_display['Amount Raised'] = inv_display['_Amount_Numeric'].apply(
+            lambda x: format_whole_number(x) if x > 0 else 'Undisclosed'
         )
         
         # Display without the numeric column
@@ -592,31 +629,15 @@ def show_deal_activity(ma_df, inv_df):
         # Top 3 deals
         top_deals = filtered_inv.copy()
         
-        # Parse function - values in Excel are already actual dollars
-        def parse_amount_value(val):
-            if val == 'Undisclosed' or pd.isna(val):
-                return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip()
-            try:
-                return float(val_str)
-            except:
-                return 0
-        
-        top_deals['Amount_Numeric'] = top_deals['Amount Raised'].apply(parse_amount_value)
+        # Use universal parser
+        top_deals['Amount_Numeric'] = top_deals['Amount Raised'].apply(parse_currency_to_number)
         top_deals = top_deals.nlargest(3, 'Amount_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Format amount with commas
-            amount_val = row['Amount Raised']
-            if pd.notna(amount_val) and amount_val != 'Undisclosed':
-                try:
-                    formatted_value = f"${float(amount_val):,.0f}"
-                except:
-                    formatted_value = str(amount_val)
-            else:
-                formatted_value = "Undisclosed"
+            # Format as whole number
+            formatted_value = format_whole_number(row['Amount_Numeric'])
             
-            # Display with formatted value - muted color
+            # Display with whole number format
             st.markdown(f"**{row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #C9A77F;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
@@ -634,20 +655,11 @@ def show_jp_morgan_summary(ma_df, inv_df):
     def calc_quarterly_stats(df, quarter, value_col):
         q_data = df[df['Quarter'] == quarter]
         
-        # Parse values
-        def parse_value(val):
-            if val == 'Undisclosed' or pd.isna(val):
-                return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip()
-            try:
-                return float(val_str)
-            except:
-                return 0
-        
-        total_value = sum(q_data[value_col].apply(parse_value))
+        # Use universal parser
+        total_value = sum(q_data[value_col].apply(parse_currency_to_number))
         count = len(q_data)
         
-        # Format value
+        # Format value as whole number or abbreviated
         if total_value >= 1000000000:
             formatted_value = f"${total_value/1000000000:.1f}B"
         elif total_value >= 1000000:
@@ -893,21 +905,8 @@ def show_ipo_activity(ipo_df):
         st.info("📊 No IPO data available yet. Use the Data Management page to add IPO information.")
         return
     
-    # Parse Amount column to numeric
-    def parse_ipo_amount(val):
-        if val == 'Undisclosed' or pd.isna(val):
-            return 0
-        val_str = str(val).replace('$', '').replace('M', '').replace('B', '').replace(',', '').strip()
-        try:
-            num = float(val_str)
-            # If original had 'B', convert to millions
-            if 'B' in str(val).upper():
-                return num * 1000
-            return num
-        except:
-            return 0
-    
-    ipo_df['Amount_Numeric'] = ipo_df['Amount'].apply(parse_ipo_amount)
+    # Parse Amount column using universal parser
+    ipo_df['Amount_Numeric'] = ipo_df['Amount'].apply(parse_currency_to_number)
     
     # Calculate quarterly stats
     quarterly_data = ipo_df.groupby('Quarter').agg({
@@ -1016,12 +1015,15 @@ def show_ipo_activity(ipo_df):
         except:
             date_str = str(date) if date != 'Undisclosed' else 'Date not provided'
         
+        # Format amount as whole number
+        amount_formatted = format_whole_number(amount)
+        
         # Create expandable section for each IPO
-        with st.expander(f"**{company}** - ${amount:,.0f}M ({quarter})", expanded=False):
+        with st.expander(f"**{company}** - {amount_formatted} ({quarter})", expanded=False):
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                st.markdown(f"**IPO Value:** ${amount:,.0f}M")
+                st.markdown(f"**IPO Value:** {amount_formatted}")
                 st.markdown(f"**Quarter:** {quarter}")
                 st.markdown(f"**Date:** {date_str}")
             
