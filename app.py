@@ -120,8 +120,10 @@ def format_currency(value):
         value = float(str(value).replace('$', '').replace('B', '').replace('M', '').replace(',', ''))
         if value >= 1000:
             return f"${value/1000:.1f}B"
+        elif value > 0:
+            return f"${value:.0f}M"
         else:
-            return f"${value:.1f}M"
+            return 'Undisclosed'
     except:
         return str(value)
 
@@ -212,9 +214,9 @@ def create_jp_morgan_chart_by_category(category, color):
         
         # Actual data from JP Morgan 2025 reports
         data_map = {
-            'M&A': [9200, 0, 21700],  # Q1: $9.2B, Q2: minimal activity, Q3: $21.7B
-            'Venture': [3700, 2300, 2900],  # Q1: $3.7B, Q2: $2.3B, Q3: $2.9B (totaling $9.5B YTD as per Q3 report - adjusted Q1 from $4.2B to $3.7B per Q1 report)
-            'IPO': [0, 0, 568],  # Q1-Q2: no IPOs over $15M, Q3: $568M (4 IPOs, YTD $1.5B across 7 offerings)
+            'M&A': [9200, 2100, 21700],  # Q1: $9.2B (57 deals), Q2: $2.1B (43 deals), Q3: $21.7B (65 deals)
+            'Venture': [3700, 2300, 2900],  # Q1: $3.7B, Q2: $2.3B, Q3: $2.9B (totaling $9.5B YTD)
+            'IPO': [0, 0, 568],  # Q1-Q2: no IPOs over $15M, Q3: $568M
             'Licensing': [871, 0, 126]  # Q1: $871M upfront, Q2: data not clear, Q3: $126M upfront
         }
         
@@ -319,22 +321,19 @@ def show_deal_activity(ma_df, inv_df):
             # Format the deal value properly
             value = row['Deal_Value_Numeric']
             if value >= 1000:
-                pure_value = f"${value/1000:.1f} billion"
-                summary = f"(${value/1000:.1f}B)"
+                formatted_value = f"${value/1000:.1f}B"
             elif value > 0:
-                pure_value = f"${value:.0f} million"
-                summary = f"(${value:.0f}M)"
+                formatted_value = f"${value:.0f}M"
             else:
-                pure_value = "Undisclosed"
-                summary = ""
+                formatted_value = "Undisclosed"
             
             # Get deal type verb
             deal_type = row['Deal Type (Merger / Acquisition)']
             verb = "merged with" if deal_type == "Merger" else "acquired"
             
-            # Display with new format
+            # Display with new format - just the formatted value, no brackets
             st.markdown(f"**{row['Acquirer']} {verb} {row['Company']}**")
-            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #1f77b4;'>{pure_value} {summary}</h1>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
     
     with tab3:
@@ -392,18 +391,15 @@ def show_deal_activity(ma_df, inv_df):
             # Format the amount properly
             value = row['Amount_Numeric']
             if value >= 1000:
-                pure_value = f"${value/1000:.1f} billion"
-                summary = f"(${value/1000:.1f}B)"
+                formatted_value = f"${value/1000:.1f}B"
             elif value > 0:
-                pure_value = f"${value:.0f} million"
-                summary = f"(${value:.0f}M)"
+                formatted_value = f"${value:.0f}M"
             else:
-                pure_value = "Undisclosed"
-                summary = ""
+                formatted_value = "Undisclosed"
             
-            # Display with new format: Only company name
+            # Display with new format: Only company name and clean formatted value
             st.markdown(f"**{row['Company']}**")
-            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{pure_value} {summary}</h1>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
     
     with tab3:
