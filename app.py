@@ -77,7 +77,7 @@ def load_data():
         return pd.DataFrame(), pd.DataFrame()
 
 def save_data(ma_df, inv_df):
-    """Save data back to Excel file"""
+    """Save data back to Excel file with backup for undo"""
     try:
         # Try multiple possible file paths - INCLUDING data folder
         possible_paths = [
@@ -102,15 +102,65 @@ def save_data(ma_df, inv_df):
             os.makedirs('data', exist_ok=True)
             excel_path = 'data/MedTech_YTD_Standardized.xlsx'
         
+        # Create backup before saving (for undo functionality)
+        backup_path = excel_path.replace('.xlsx', '_backup.xlsx')
+        if os.path.exists(excel_path):
+            import shutil
+            shutil.copy2(excel_path, backup_path)
+            st.session_state.last_backup_time = pd.Timestamp.now()
+        
         # Save with correct sheet names (with spaces)
         with pd.ExcelWriter(excel_path, engine='openpyxl', mode='w') as writer:
             ma_df.to_excel(writer, sheet_name='YTD M&A Activity', index=False)
             inv_df.to_excel(writer, sheet_name='YTD Investment Activity', index=False)
+        
+        st.session_state.changes_made = True
         return True
     except Exception as e:
         st.error(f"Error saving data: {str(e)}")
         st.warning("⚠️ Note: Streamlit Cloud has a read-only file system. Changes won't persist after app restarts.")
         return False
+
+def undo_last_action():
+    """Restore data from backup file"""
+    try:
+        possible_paths = [
+            'data/MedTech_YTD_Standardized.xlsx',
+            './data/MedTech_YTD_Standardized.xlsx',
+            'MedTech_YTD_Standardized.xlsx',
+        ]
+        
+        excel_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                excel_path = path
+                break
+        
+        if excel_path is None:
+            return False, "No data file found"
+        
+        backup_path = excel_path.replace('.xlsx', '_backup.xlsx')
+        
+        if not os.path.exists(backup_path):
+            return False, "No backup available to restore"
+        
+        # Restore from backup
+        import shutil
+        shutil.copy2(backup_path, excel_path)
+        
+        # Clear flags
+        if 'changes_made' in st.session_state:
+            del st.session_state.changes_made
+        if 'last_backup_time' in st.session_state:
+            del st.session_state.last_backup_time
+        
+        # Clear cache to reload data
+        st.cache_data.clear()
+        
+        return True, "Successfully restored previous version"
+        
+    except Exception as e:
+        return False, f"Error restoring backup: {str(e)}"
 
 def format_currency(value):
     """Format currency values"""
@@ -792,6 +842,23 @@ def show_jp_morgan_summary():
 def show_data_management(ma_df, inv_df):
     """Data management page for adding deals and uploading JP Morgan reports"""
     st.header("Data Management")
+    
+    # Add undo button at the top
+    if 'changes_made' in st.session_state and st.session_state.changes_made:
+        col1, col2, col3 = st.columns([1, 1, 4])
+        with col1:
+            if st.button("↩️ Undo Last Action", type="secondary", use_container_width=True):
+                success, message = undo_last_action()
+                if success:
+                    st.success(f"✅ {message}")
+                    st.rerun()
+                else:
+                    st.error(f"❌ {message}")
+        with col2:
+            if 'last_backup_time' in st.session_state:
+                st.caption(f"Last change: {st.session_state.last_backup_time.strftime('%I:%M %p')}")
+        
+        st.markdown("---")
     
     # Create tabs for different data management tasks
     tab1, tab2, tab3 = st.tabs(["📝 Add Manual Deals", "🌐 Web Scraper", "📊 Upload JP Morgan Report"])
