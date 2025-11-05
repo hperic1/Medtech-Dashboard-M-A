@@ -198,16 +198,19 @@ def create_quarterly_chart(df, value_col, title):
         # Create figure
         fig = go.Figure()
         
+        # Convert to millions for proper display
+        quarterly_data['Total_Value_Millions'] = quarterly_data['Total_Value'] / 1000000
+        
         # Add bar chart for deal values
         fig.add_trace(go.Bar(
             x=quarterly_data['Quarter'],
-            y=quarterly_data['Total_Value'],
+            y=quarterly_data['Total_Value_Millions'],
             name='Deal Value',
             marker_color='#7FA8C9',  # Muted blue
-            text=[f"${v:,.0f}" for v in quarterly_data['Total_Value']],  # Full amount with commas
+            text=[f"${v:,.0f}M" for v in quarterly_data['Total_Value_Millions']],  # Show in millions
             textposition='outside',
             yaxis='y',
-            hovertemplate='<b>%{x}</b><br>Deal Value: $%{y:,.0f}<br><extra></extra>'
+            hovertemplate='<b>%{x}</b><br>Deal Value: $%{y:,.0f}M<br><extra></extra>'
         ))
         
         # Add line chart for deal count
@@ -229,10 +232,10 @@ def create_quarterly_chart(df, value_col, title):
             title=title,
             xaxis=dict(title='Quarter', showgrid=False),
             yaxis=dict(
-                title='Total Deal Value (USD)',
+                title='Total Deal Value (USD Millions)',
                 side='left',
                 showgrid=False,  # Remove gridlines
-                range=[0, max(quarterly_data['Total_Value']) * 1.2]  # Extend y-axis by 20% for data labels
+                range=[0, max(quarterly_data['Total_Value_Millions']) * 1.2]  # Extend y-axis by 20% for data labels
             ),
             yaxis2=dict(
                 title='Number of Deals',
@@ -348,7 +351,7 @@ def create_jp_morgan_chart_by_category(category, color):
             title=f'{category} Activity',
             xaxis=dict(title='Quarter', showgrid=False),
             yaxis=dict(
-                title='Deal Value (Millions USD)',
+                title='Deal Value (USD Millions)',
                 side='left',
                 showgrid=False,  # Remove gridlines
                 range=[0, max(values) * 1.2]  # Extend y-axis by 20% for data labels
@@ -389,12 +392,14 @@ def main():
     
     # Sidebar navigation
     st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to", ["Deal Activity", "JP Morgan Summary", "Data Management"])
+    page = st.sidebar.radio("Go to", ["Deal Activity", "JP Morgan Summary", "IPO Activity", "Data Management"])
     
     if page == "Deal Activity":
         show_deal_activity(ma_df, inv_df)
     elif page == "JP Morgan Summary":
         show_jp_morgan_summary(ma_df, inv_df)
+    elif page == "IPO Activity":
+        show_ipo_activity()
     elif page == "Data Management":
         show_data_management(ma_df, inv_df)
 
@@ -749,24 +754,24 @@ def show_jp_morgan_summary(ma_df, inv_df):
         fig_ma_comp.add_trace(go.Bar(
             name='JPMorgan',
             x=['Deal Value'],
-            y=[jp_ma_ytd_value],
+            y=[jp_ma_ytd_value / 1000],  # Convert to billions for display
             marker_color='#7FA8C9',
             text=[f'${jp_ma_ytd_value/1000:.1f}B'],
             textposition='outside',
             width=0.4,
-            hovertemplate='<b>JPMorgan</b><br>Deal Value: $%{y:.0f}M<extra></extra>'
+            hovertemplate='<b>JPMorgan</b><br>Deal Value: $%{y:.1f}B<extra></extra>'
         ))
         
         # BeaconOne bar
         fig_ma_comp.add_trace(go.Bar(
             name='BeaconOne',
             x=['Deal Value'],
-            y=[beacon_ma_ytd_value],
+            y=[beacon_ma_ytd_value / 1000],  # Convert to billions for display
             marker_color='#A8C9D1',
             text=[f'${beacon_ma_ytd_value/1000:.1f}B'],
             textposition='outside',
             width=0.4,
-            hovertemplate='<b>BeaconOne</b><br>Deal Value: $%{y:.0f}M<extra></extra>'
+            hovertemplate='<b>BeaconOne</b><br>Deal Value: $%{y:.1f}B<extra></extra>'
         ))
         
         fig_ma_comp.update_layout(
@@ -776,9 +781,9 @@ def show_jp_morgan_summary(ma_df, inv_df):
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             xaxis=dict(showgrid=False, title=''),
             yaxis=dict(
-                title='Deal Value ($M)',
+                title='Deal Value (USD Billions)',
                 showgrid=False,
-                range=[0, max(jp_ma_ytd_value, beacon_ma_ytd_value) * 1.2]
+                range=[0, max(jp_ma_ytd_value, beacon_ma_ytd_value) / 1000 * 1.2]
             ),
             plot_bgcolor='white',
             paper_bgcolor='white',
@@ -813,24 +818,24 @@ def show_jp_morgan_summary(ma_df, inv_df):
         fig_vc_comp.add_trace(go.Bar(
             name='JPMorgan',
             x=['Deal Value'],
-            y=[jp_vc_ytd_value],
+            y=[jp_vc_ytd_value / 1000],  # Convert to billions for display
             marker_color='#C9A77F',
             text=[f'${jp_vc_ytd_value/1000:.1f}B'],
             textposition='outside',
             width=0.4,
-            hovertemplate='<b>JPMorgan</b><br>Deal Value: $%{y:.0f}M<extra></extra>'
+            hovertemplate='<b>JPMorgan</b><br>Deal Value: $%{y:.1f}B<extra></extra>'
         ))
         
         # BeaconOne bar
         fig_vc_comp.add_trace(go.Bar(
             name='BeaconOne',
             x=['Deal Value'],
-            y=[beacon_vc_ytd_value],
+            y=[beacon_vc_ytd_value / 1000],  # Convert to billions for display
             marker_color='#D9C9A8',
             text=[f'${beacon_vc_ytd_value/1000:.1f}B'],
             textposition='outside',
             width=0.4,
-            hovertemplate='<b>BeaconOne</b><br>Deal Value: $%{y:.0f}M<extra></extra>'
+            hovertemplate='<b>BeaconOne</b><br>Deal Value: $%{y:.1f}B<extra></extra>'
         ))
         
         fig_vc_comp.update_layout(
@@ -840,9 +845,9 @@ def show_jp_morgan_summary(ma_df, inv_df):
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             xaxis=dict(showgrid=False, title=''),
             yaxis=dict(
-                title='Deal Value ($M)',
+                title='Deal Value (USD Billions)',
                 showgrid=False,
-                range=[0, max(jp_vc_ytd_value, beacon_vc_ytd_value) * 1.2]
+                range=[0, max(jp_vc_ytd_value, beacon_vc_ytd_value) / 1000 * 1.2]
             ),
             plot_bgcolor='white',
             paper_bgcolor='white',
@@ -867,6 +872,160 @@ def show_jp_morgan_summary(ma_df, inv_df):
         </div>
         """, unsafe_allow_html=True)
 
+def show_ipo_activity():
+    """Display IPO activity from JP Morgan reports"""
+    st.header("IPO Activity")
+    
+    # Load IPO data from JSON files
+    ipo_data = {}
+    for q in ['Q1', 'Q2', 'Q3', 'Q4']:
+        json_path = f'data/jp_morgan_ipo_{q}_2025.json'
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                ipo_data[q] = json.load(f)
+    
+    # If no data exists, show default/example data
+    if not ipo_data:
+        st.info("📊 No IPO data has been uploaded yet. Use the Data Management page to add IPO information from JP Morgan reports.")
+        
+        # Show example structure
+        st.markdown("### Example IPO Data Structure")
+        st.markdown("""
+        When you upload IPO data, you'll see:
+        - **YTD Chart**: Visual representation of IPO activity by quarter
+        - **IPO List**: Detailed information about each IPO including:
+          - Company name
+          - IPO value
+          - Date
+          - Key details from the report
+        """)
+        return
+    
+    # Calculate YTD totals
+    quarters = []
+    values = []
+    counts = []
+    
+    for q in ['Q1', 'Q2', 'Q3', 'Q4']:
+        if q in ipo_data:
+            quarters.append(q)
+            values.append(ipo_data[q].get('total_value', 0))
+            counts.append(ipo_data[q].get('count', 0))
+    
+    # Create YTD chart
+    if quarters:
+        st.markdown("### YTD 2025 IPO Activity")
+        
+        fig = go.Figure()
+        
+        # Add bar chart for IPO values
+        fig.add_trace(go.Bar(
+            x=quarters,
+            y=values,
+            name='IPO Value',
+            marker_color='#9B8FAC',  # Muted purple
+            text=[f'${v:,.0f}M' if v > 0 else 'No IPOs' for v in values],
+            textposition='outside',
+            yaxis='y',
+            hovertemplate='<b>%{x}</b><br>IPO Value: $%{y:,.0f}M<br><extra></extra>'
+        ))
+        
+        # Add line chart for IPO count
+        fig.add_trace(go.Scatter(
+            x=quarters,
+            y=counts,
+            name='IPO Count',
+            mode='lines+markers+text',
+            line=dict(color='#8A7A98', width=3),
+            marker=dict(size=10),
+            text=counts,
+            textposition='top center',
+            yaxis='y2',
+            hovertemplate='<b>%{x}</b><br>IPO Count: %{y}<br><extra></extra>'
+        ))
+        
+        fig.update_layout(
+            xaxis=dict(title='Quarter', showgrid=False),
+            yaxis=dict(
+                title='Total IPO Value (USD Millions)',
+                side='left',
+                showgrid=False,
+                range=[0, max(values) * 1.3] if max(values) > 0 else [0, 100]
+            ),
+            yaxis2=dict(
+                title='Number of IPOs',
+                overlaying='y',
+                side='right',
+                showgrid=False,
+                range=[0, max(counts) * 1.4] if max(counts) > 0 else [0, 10]
+            ),
+            hovermode='x unified',
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            height=450,
+            margin=dict(t=60, b=50, l=50, r=50),
+            plot_bgcolor='white',
+            paper_bgcolor='white'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # YTD Summary
+        total_value = sum(values)
+        total_count = sum(counts)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total YTD IPO Value", f"${total_value:,.0f}M")
+        with col2:
+            st.metric("Total YTD IPOs", total_count)
+        with col3:
+            avg_value = total_value / total_count if total_count > 0 else 0
+            st.metric("Average IPO Size", f"${avg_value:,.0f}M")
+    
+    # Display detailed IPO list
+    st.markdown("---")
+    st.markdown("### 2025 IPO Details")
+    
+    # Collect all IPOs
+    all_ipos = []
+    for q in ['Q1', 'Q2', 'Q3', 'Q4']:
+        if q in ipo_data and 'ipos' in ipo_data[q]:
+            for ipo in ipo_data[q]['ipos']:
+                ipo['quarter'] = q
+                all_ipos.append(ipo)
+    
+    if all_ipos:
+        # Sort by value (descending)
+        all_ipos.sort(key=lambda x: x.get('value', 0), reverse=True)
+        
+        # Display each IPO
+        for ipo in all_ipos:
+            company = ipo.get('company', 'Unknown Company')
+            value = ipo.get('value', 0)
+            quarter = ipo.get('quarter', 'Q1')
+            date = ipo.get('date', 'Date not provided')
+            details = ipo.get('details', [])
+            
+            # Create expandable section for each IPO
+            with st.expander(f"**{company}** - ${value:,.0f}M ({quarter} 2025)", expanded=False):
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.markdown(f"**IPO Value:** ${value:,.0f}M")
+                    st.markdown(f"**Quarter:** {quarter} 2025")
+                    st.markdown(f"**Date:** {date}")
+                
+                with col2:
+                    if details:
+                        st.markdown("**Key Details:**")
+                        for detail in details:
+                            st.markdown(f"• {detail}")
+                    else:
+                        st.markdown("*No additional details provided*")
+    else:
+        st.info("No IPO details available. Add IPO information through the Data Management page.")
+
 def show_data_management(ma_df, inv_df):
     """Data management page for adding deals and uploading JP Morgan reports"""
     st.header("Data Management")
@@ -889,13 +1048,16 @@ def show_data_management(ma_df, inv_df):
         st.markdown("---")
     
     # Create tabs for different data management tasks
-    tab1, tab2 = st.tabs(["📝 Add Manual Deals", "📊 Upload JP Morgan Report"])
+    tab1, tab2, tab3 = st.tabs(["📝 Add Manual Deals", "📊 Upload JP Morgan Report", "🎯 Add IPO Data"])
     
     with tab1:
         show_manual_deal_entry(ma_df, inv_df)
     
     with tab2:
         show_jp_morgan_upload()
+    
+    with tab3:
+        show_ipo_data_upload()
 
 def show_manual_deal_entry(ma_df, inv_df):
     """Manual deal entry forms"""
@@ -1119,6 +1281,106 @@ def show_jp_morgan_upload():
             st.balloons()
             
             # Clear cache to reload data
+            st.cache_data.clear()
+
+def show_ipo_data_upload():
+    """Upload and manage IPO data from JP Morgan reports"""
+    st.subheader("Add IPO Data from JP Morgan Reports")
+    
+    st.info("""
+    📈 **Instructions:**
+    1. Select the quarter for the IPO data
+    2. Enter aggregate IPO statistics (total value and count)
+    3. Add individual IPO details with company information
+    """)
+    
+    # Quarter selection
+    col1, col2 = st.columns(2)
+    with col1:
+        report_year = st.selectbox("Report Year", [2025, 2024, 2023], key='ipo_year')
+    with col2:
+        report_quarter = st.selectbox("Report Quarter", ["Q1", "Q2", "Q3", "Q4"], key='ipo_quarter')
+    
+    st.markdown("### Quarterly IPO Summary")
+    
+    with st.form("ipo_summary_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            total_ipo_value = st.number_input("Total IPO Value ($M)", min_value=0.0, value=0.0, step=10.0)
+        with col2:
+            total_ipo_count = st.number_input("Total Number of IPOs", min_value=0, value=0, step=1)
+        
+        st.markdown("### Individual IPO Details")
+        st.markdown("Add information about specific IPOs in this quarter:")
+        
+        # Number of IPOs to add
+        num_ipos = st.number_input("How many IPOs to add?", min_value=0, max_value=20, value=0, step=1)
+        
+        ipos_list = []
+        
+        for i in range(int(num_ipos)):
+            st.markdown(f"#### IPO #{i+1}")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                company_name = st.text_input(f"Company Name", key=f"ipo_company_{i}")
+            with col2:
+                ipo_value = st.number_input(f"IPO Value ($M)", min_value=0.0, value=0.0, step=1.0, key=f"ipo_value_{i}")
+            with col3:
+                ipo_date = st.text_input(f"Date", placeholder="e.g., Jan 15, 2025", key=f"ipo_date_{i}")
+            
+            # Details as bullet points
+            ipo_details = st.text_area(
+                f"Key Details (one per line)",
+                placeholder="Enter each detail on a new line:\n- Detail 1\n- Detail 2\n- Detail 3",
+                key=f"ipo_details_{i}",
+                height=100
+            )
+            
+            if company_name:
+                # Parse details into list
+                details_list = []
+                if ipo_details:
+                    for line in ipo_details.split('\n'):
+                        line = line.strip()
+                        if line:
+                            # Remove leading bullet points or dashes
+                            line = line.lstrip('•-– ').strip()
+                            if line:
+                                details_list.append(line)
+                
+                ipos_list.append({
+                    'company': company_name,
+                    'value': ipo_value,
+                    'date': ipo_date if ipo_date else 'Date not provided',
+                    'details': details_list
+                })
+        
+        submitted = st.form_submit_button("💾 Save IPO Data")
+        
+        if submitted:
+            # Create the IPO data structure
+            ipo_data = {
+                'year': report_year,
+                'quarter': report_quarter,
+                'total_value': total_ipo_value,
+                'count': total_ipo_count,
+                'ipos': ipos_list
+            }
+            
+            # Create data directory if it doesn't exist
+            os.makedirs('data', exist_ok=True)
+            
+            # Save to JSON file
+            json_path = f'data/jp_morgan_ipo_{report_quarter}_{report_year}.json'
+            with open(json_path, 'w') as f:
+                json.dump(ipo_data, f, indent=2)
+            
+            st.success(f"✅ IPO data for {report_quarter} {report_year} saved successfully!")
+            st.info("📊 Navigate to 'IPO Activity' page to view the updated charts and details.")
+            st.balloons()
+            
+            # Clear cache
             st.cache_data.clear()
 
 if __name__ == "__main__":
