@@ -59,7 +59,7 @@ def load_data():
         if excel_path is None:
             st.error("❌ Cannot find MedTech_YTD_Standardized.xlsx. Please ensure the file is in the 'data' folder or same directory as app.py")
             st.info("🔍 Looking in these locations:\n" + "\n".join(f"- {p}" for p in possible_paths))
-            return pd.DataFrame(), pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         
         # Load M&A data - NOTE: Sheet name has SPACES not underscores
         ma_df = pd.read_excel(excel_path, sheet_name='YTD M&A Activity')
@@ -67,17 +67,21 @@ def load_data():
         # Load Investment data - NOTE: Sheet name has SPACES not underscores
         inv_df = pd.read_excel(excel_path, sheet_name='YTD Investment Activity')
         
+        # Load IPO data
+        ipo_df = pd.read_excel(excel_path, sheet_name='YTD IPO')
+        
         # Clean and standardize data
         ma_df = ma_df.fillna('Undisclosed')
         inv_df = inv_df.fillna('Undisclosed')
+        ipo_df = ipo_df.fillna('Undisclosed')
         
-        return ma_df, inv_df
+        return ma_df, inv_df, ipo_df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
-        st.info("💡 Make sure your Excel file has sheets named 'YTD M&A Activity' and 'YTD Investment Activity' (with spaces)")
-        return pd.DataFrame(), pd.DataFrame()
+        st.info("💡 Make sure your Excel file has sheets named 'YTD M&A Activity', 'YTD Investment Activity', and 'YTD IPO' (with spaces)")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-def save_data(ma_df, inv_df):
+def save_data(ma_df, inv_df, ipo_df):
     """Save data back to Excel file with backup for undo"""
     try:
         # Try multiple possible file paths - INCLUDING data folder
@@ -114,6 +118,7 @@ def save_data(ma_df, inv_df):
         with pd.ExcelWriter(excel_path, engine='openpyxl', mode='w') as writer:
             ma_df.to_excel(writer, sheet_name='YTD M&A Activity', index=False)
             inv_df.to_excel(writer, sheet_name='YTD Investment Activity', index=False)
+            ipo_df.to_excel(writer, sheet_name='YTD IPO', index=False)
         
         st.session_state.changes_made = True
         return True
@@ -388,7 +393,7 @@ def main():
     st.title("🥼 MedTech M&A & Investment Activity Dashboard")
     
     # Load data
-    ma_df, inv_df = load_data()
+    ma_df, inv_df, ipo_df = load_data()
     
     # Sidebar navigation
     st.sidebar.title("Navigation")
@@ -399,9 +404,9 @@ def main():
     elif page == "JP Morgan Summary":
         show_jp_morgan_summary(ma_df, inv_df)
     elif page == "IPO Activity":
-        show_ipo_activity()
+        show_ipo_activity(ipo_df)
     elif page == "Data Management":
-        show_data_management(ma_df, inv_df)
+        show_data_management(ma_df, inv_df, ipo_df)
 
 def show_deal_activity(ma_df, inv_df):
     """Display deal activity dashboard"""
@@ -872,161 +877,154 @@ def show_jp_morgan_summary(ma_df, inv_df):
         </div>
         """, unsafe_allow_html=True)
 
-def show_ipo_activity():
-    """Display IPO activity from JP Morgan reports"""
+def show_ipo_activity(ipo_df):
+    """Display IPO activity from Excel data"""
     st.header("IPO Activity")
     
-    # Load IPO data from JSON files
-    ipo_data = {}
-    for q in ['Q1', 'Q2', 'Q3', 'Q4']:
-        json_path = f'data/jp_morgan_ipo_{q}_2025.json'
-        if os.path.exists(json_path):
-            with open(json_path, 'r') as f:
-                ipo_data[q] = json.load(f)
-    
-    # If no data exists, show default/example data
-    if not ipo_data:
-        st.info("📊 No IPO data has been uploaded yet. Use the Data Management page to add IPO information from JP Morgan reports.")
-        
-        # Show example structure
-        st.markdown("### Example IPO Data Structure")
-        st.markdown("""
-        When you upload IPO data, you'll see:
-        - **YTD Chart**: Visual representation of IPO activity by quarter
-        - **IPO List**: Detailed information about each IPO including:
-          - Company name
-          - IPO value
-          - Date
-          - Key details from the report
-        """)
+    if ipo_df.empty:
+        st.info("📊 No IPO data available yet. Use the Data Management page to add IPO information.")
         return
     
-    # Calculate YTD totals
-    quarters = []
-    values = []
-    counts = []
+    # Parse Amount column to numeric
+    def parse_ipo_amount(val):
+        if val == 'Undisclosed' or pd.isna(val):
+            return 0
+        val_str = str(val).replace('$', '').replace('M', '').replace('B', '').replace(',', '').strip()
+        try:
+            num = float(val_str)
+            # If original had 'B', convert to millions
+            if 'B' in str(val).upper():
+                return num * 1000
+            return num
+        except:
+            return 0
     
-    for q in ['Q1', 'Q2', 'Q3', 'Q4']:
-        if q in ipo_data:
-            quarters.append(q)
-            values.append(ipo_data[q].get('total_value', 0))
-            counts.append(ipo_data[q].get('count', 0))
+    ipo_df['Amount_Numeric'] = ipo_df['Amount'].apply(parse_ipo_amount)
+    
+    # Calculate quarterly stats
+    quarterly_data = ipo_df.groupby('Quarter').agg({
+        'Amount_Numeric': 'sum',
+        'Company': 'count'
+    }).reset_index()
+    quarterly_data.columns = ['Quarter', 'Total_Value', 'IPO_Count']
+    
+    # Sort quarters
+    quarter_order = ['Q1 2025', 'Q2 2025', 'Q3 2025', 'Q4 2025']
+    quarterly_data['Quarter'] = pd.Categorical(quarterly_data['Quarter'], categories=quarter_order, ordered=True)
+    quarterly_data = quarterly_data.sort_values('Quarter').reset_index(drop=True)
     
     # Create YTD chart
-    if quarters:
-        st.markdown("### YTD 2025 IPO Activity")
-        
-        fig = go.Figure()
-        
-        # Add bar chart for IPO values
-        fig.add_trace(go.Bar(
-            x=quarters,
-            y=values,
-            name='IPO Value',
-            marker_color='#9B8FAC',  # Muted purple
-            text=[f'${v:,.0f}M' if v > 0 else 'No IPOs' for v in values],
-            textposition='outside',
-            yaxis='y',
-            hovertemplate='<b>%{x}</b><br>IPO Value: $%{y:,.0f}M<br><extra></extra>'
-        ))
-        
-        # Add line chart for IPO count
-        fig.add_trace(go.Scatter(
-            x=quarters,
-            y=counts,
-            name='IPO Count',
-            mode='lines+markers+text',
-            line=dict(color='#8A7A98', width=3),
-            marker=dict(size=10),
-            text=counts,
-            textposition='top center',
-            yaxis='y2',
-            hovertemplate='<b>%{x}</b><br>IPO Count: %{y}<br><extra></extra>'
-        ))
-        
-        fig.update_layout(
-            xaxis=dict(title='Quarter', showgrid=False),
-            yaxis=dict(
-                title='Total IPO Value (USD Millions)',
-                side='left',
-                showgrid=False,
-                range=[0, max(values) * 1.3] if max(values) > 0 else [0, 100]
-            ),
-            yaxis2=dict(
-                title='Number of IPOs',
-                overlaying='y',
-                side='right',
-                showgrid=False,
-                range=[0, max(counts) * 1.4] if max(counts) > 0 else [0, 10]
-            ),
-            hovermode='x unified',
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            height=450,
-            margin=dict(t=60, b=50, l=50, r=50),
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # YTD Summary
-        total_value = sum(values)
-        total_count = sum(counts)
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total YTD IPO Value", f"${total_value:,.0f}M")
-        with col2:
-            st.metric("Total YTD IPOs", total_count)
-        with col3:
-            avg_value = total_value / total_count if total_count > 0 else 0
-            st.metric("Average IPO Size", f"${avg_value:,.0f}M")
+    st.markdown("### YTD 2025 IPO Activity")
+    
+    fig = go.Figure()
+    
+    # Add bar chart for IPO values
+    fig.add_trace(go.Bar(
+        x=quarterly_data['Quarter'],
+        y=quarterly_data['Total_Value'],
+        name='IPO Value',
+        marker_color='#9B8FAC',  # Muted purple
+        text=[f'${v:,.0f}M' if v > 0 else 'No IPOs' for v in quarterly_data['Total_Value']],
+        textposition='outside',
+        yaxis='y',
+        hovertemplate='<b>%{x}</b><br>IPO Value: $%{y:,.0f}M<br><extra></extra>'
+    ))
+    
+    # Add line chart for IPO count
+    fig.add_trace(go.Scatter(
+        x=quarterly_data['Quarter'],
+        y=quarterly_data['IPO_Count'],
+        name='IPO Count',
+        mode='lines+markers+text',
+        line=dict(color='#8A7A98', width=3),
+        marker=dict(size=10),
+        text=quarterly_data['IPO_Count'],
+        textposition='top center',
+        yaxis='y2',
+        hovertemplate='<b>%{x}</b><br>IPO Count: %{y}<br><extra></extra>'
+    ))
+    
+    fig.update_layout(
+        xaxis=dict(title='Quarter', showgrid=False),
+        yaxis=dict(
+            title='Total IPO Value (USD Millions)',
+            side='left',
+            showgrid=False,
+            range=[0, max(quarterly_data['Total_Value']) * 1.3] if max(quarterly_data['Total_Value']) > 0 else [0, 100]
+        ),
+        yaxis2=dict(
+            title='Number of IPOs',
+            overlaying='y',
+            side='right',
+            showgrid=False,
+            range=[0, max(quarterly_data['IPO_Count']) * 1.4] if max(quarterly_data['IPO_Count']) > 0 else [0, 10]
+        ),
+        hovermode='x unified',
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=450,
+        margin=dict(t=60, b=50, l=50, r=50),
+        plot_bgcolor='white',
+        paper_bgcolor='white'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # YTD Summary
+    total_value = quarterly_data['Total_Value'].sum()
+    total_count = quarterly_data['IPO_Count'].sum()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total YTD IPO Value", f"${total_value:,.0f}M")
+    with col2:
+        st.metric("Total YTD IPOs", total_count)
+    with col3:
+        avg_value = total_value / total_count if total_count > 0 else 0
+        st.metric("Average IPO Size", f"${avg_value:,.0f}M")
     
     # Display detailed IPO list
     st.markdown("---")
     st.markdown("### 2025 IPO Details")
     
-    # Collect all IPOs
-    all_ipos = []
-    for q in ['Q1', 'Q2', 'Q3', 'Q4']:
-        if q in ipo_data and 'ipos' in ipo_data[q]:
-            for ipo in ipo_data[q]['ipos']:
-                ipo['quarter'] = q
-                all_ipos.append(ipo)
+    # Sort by amount (descending)
+    ipo_display = ipo_df.sort_values('Amount_Numeric', ascending=False).reset_index(drop=True)
     
-    if all_ipos:
-        # Sort by value (descending)
-        all_ipos.sort(key=lambda x: x.get('value', 0), reverse=True)
+    # Display each IPO
+    for idx, row in ipo_display.iterrows():
+        company = row['Company']
+        amount = row['Amount_Numeric']
+        quarter = row['Quarter']
+        date = row['Date']
+        technology = row['Technology']
+        details = row['Investors/Deal Details']
         
-        # Display each IPO
-        for ipo in all_ipos:
-            company = ipo.get('company', 'Unknown Company')
-            value = ipo.get('value', 0)
-            quarter = ipo.get('quarter', 'Q1')
-            date = ipo.get('date', 'Date not provided')
-            details = ipo.get('details', [])
+        # Format date
+        try:
+            if pd.notna(date) and date != 'Undisclosed':
+                date_str = pd.to_datetime(date).strftime('%B %d, %Y')
+            else:
+                date_str = 'Date not provided'
+        except:
+            date_str = str(date) if date != 'Undisclosed' else 'Date not provided'
+        
+        # Create expandable section for each IPO
+        with st.expander(f"**{company}** - ${amount:,.0f}M ({quarter})", expanded=False):
+            col1, col2 = st.columns([1, 2])
             
-            # Create expandable section for each IPO
-            with st.expander(f"**{company}** - ${value:,.0f}M ({quarter} 2025)", expanded=False):
-                col1, col2 = st.columns([1, 2])
-                
-                with col1:
-                    st.markdown(f"**IPO Value:** ${value:,.0f}M")
-                    st.markdown(f"**Quarter:** {quarter} 2025")
-                    st.markdown(f"**Date:** {date}")
-                
-                with col2:
-                    if details:
-                        st.markdown("**Key Details:**")
-                        for detail in details:
-                            st.markdown(f"• {detail}")
-                    else:
-                        st.markdown("*No additional details provided*")
-    else:
-        st.info("No IPO details available. Add IPO information through the Data Management page.")
+            with col1:
+                st.markdown(f"**IPO Value:** ${amount:,.0f}M")
+                st.markdown(f"**Quarter:** {quarter}")
+                st.markdown(f"**Date:** {date_str}")
+            
+            with col2:
+                st.markdown("**Technology:**")
+                st.markdown(f"• {technology}")
+                if details and details != 'Undisclosed':
+                    st.markdown("**Deal Details:**")
+                    st.markdown(f"• {details}")
 
-def show_data_management(ma_df, inv_df):
+def show_data_management(ma_df, inv_df, ipo_df):
     """Data management page for adding deals and uploading JP Morgan reports"""
     st.header("Data Management")
     
@@ -1051,15 +1049,15 @@ def show_data_management(ma_df, inv_df):
     tab1, tab2, tab3 = st.tabs(["📝 Add Manual Deals", "📊 Upload JP Morgan Report", "🎯 Add IPO Data"])
     
     with tab1:
-        show_manual_deal_entry(ma_df, inv_df)
+        show_manual_deal_entry(ma_df, inv_df, ipo_df)
     
     with tab2:
         show_jp_morgan_upload()
     
     with tab3:
-        show_ipo_data_upload()
+        show_ipo_manual_entry(ma_df, inv_df, ipo_df)
 
-def show_manual_deal_entry(ma_df, inv_df):
+def show_manual_deal_entry(ma_df, inv_df, ipo_df):
     """Manual deal entry forms"""
     st.subheader("Add New Deal Manually")
     
@@ -1127,7 +1125,7 @@ def show_manual_deal_entry(ma_df, inv_df):
                     ma_df_updated = pd.concat([ma_df, new_deal], ignore_index=True)
                     
                     # Save data
-                    if save_data(ma_df_updated, inv_df):
+                    if save_data(ma_df_updated, inv_df, ipo_df):
                         st.success("✅ M&A deal added successfully!")
                         st.balloons()
                         # Clear cache to reload data
@@ -1198,7 +1196,7 @@ def show_manual_deal_entry(ma_df, inv_df):
                     inv_df_updated = pd.concat([inv_df, new_deal], ignore_index=True)
                     
                     # Save data
-                    if save_data(ma_df, inv_df_updated):
+                    if save_data(ma_df, inv_df_updated, ipo_df):
                         st.success("✅ Investment deal added successfully!")
                         st.balloons()
                         # Clear cache to reload data
@@ -1283,105 +1281,75 @@ def show_jp_morgan_upload():
             # Clear cache to reload data
             st.cache_data.clear()
 
-def show_ipo_data_upload():
-    """Upload and manage IPO data from JP Morgan reports"""
-    st.subheader("Add IPO Data from JP Morgan Reports")
+def show_ipo_manual_entry(ma_df, inv_df, ipo_df):
+    """Manual IPO entry form matching Excel YTD IPO sheet columns"""
+    st.subheader("Add IPO Manually")
     
-    st.info("""
-    📈 **Instructions:**
-    1. Select the quarter for the IPO data
-    2. Enter aggregate IPO statistics (total value and count)
-    3. Add individual IPO details with company information
-    """)
+    st.info("📈 Add IPO information that will be saved to the YTD IPO sheet in the Excel file.")
     
-    # Quarter selection
-    col1, col2 = st.columns(2)
-    with col1:
-        report_year = st.selectbox("Report Year", [2025, 2024, 2023], key='ipo_year')
-    with col2:
-        report_quarter = st.selectbox("Report Quarter", ["Q1", "Q2", "Q3", "Q4"], key='ipo_quarter')
-    
-    st.markdown("### Quarterly IPO Summary")
-    
-    with st.form("ipo_summary_form"):
+    with st.form("ipo_form"):
         col1, col2 = st.columns(2)
+        
         with col1:
-            total_ipo_value = st.number_input("Total IPO Value ($M)", min_value=0.0, value=0.0, step=10.0)
+            company = st.text_input("Company*", help="Company name")
+            ipo_type = st.selectbox("Type*", ["IPO"], help="Transaction type")
+            technology = st.text_area("Technology*", help="Technology/product description")
+        
         with col2:
-            total_ipo_count = st.number_input("Total Number of IPOs", min_value=0, value=0, step=1)
+            deal_details = st.text_area("Investors/Deal Details*", help="Deal structure, exchange listing, share details, etc.")
+            amount = st.text_input("Amount (e.g., 235M, 1.5B, or Undisclosed)*", help="IPO proceeds amount")
         
-        st.markdown("### Individual IPO Details")
-        st.markdown("Add information about specific IPOs in this quarter:")
+        col3, col4 = st.columns(2)
+        with col3:
+            quarter = st.selectbox("Quarter*", ["Q1 2025", "Q2 2025", "Q3 2025", "Q4 2025"])
+        with col4:
+            date = st.date_input("Date*", help="IPO date")
         
-        # Number of IPOs to add
-        num_ipos = st.number_input("How many IPOs to add?", min_value=0, max_value=20, value=0, step=1)
-        
-        ipos_list = []
-        
-        for i in range(int(num_ipos)):
-            st.markdown(f"#### IPO #{i+1}")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                company_name = st.text_input(f"Company Name", key=f"ipo_company_{i}")
-            with col2:
-                ipo_value = st.number_input(f"IPO Value ($M)", min_value=0.0, value=0.0, step=1.0, key=f"ipo_value_{i}")
-            with col3:
-                ipo_date = st.text_input(f"Date", placeholder="e.g., Jan 15, 2025", key=f"ipo_date_{i}")
-            
-            # Details as bullet points
-            ipo_details = st.text_area(
-                f"Key Details (one per line)",
-                placeholder="Enter each detail on a new line:\n- Detail 1\n- Detail 2\n- Detail 3",
-                key=f"ipo_details_{i}",
-                height=100
-            )
-            
-            if company_name:
-                # Parse details into list
-                details_list = []
-                if ipo_details:
-                    for line in ipo_details.split('\n'):
-                        line = line.strip()
-                        if line:
-                            # Remove leading bullet points or dashes
-                            line = line.lstrip('•-– ').strip()
-                            if line:
-                                details_list.append(line)
-                
-                ipos_list.append({
-                    'company': company_name,
-                    'value': ipo_value,
-                    'date': ipo_date if ipo_date else 'Date not provided',
-                    'details': details_list
-                })
-        
-        submitted = st.form_submit_button("💾 Save IPO Data")
+        submitted = st.form_submit_button("Add IPO")
         
         if submitted:
-            # Create the IPO data structure
-            ipo_data = {
-                'year': report_year,
-                'quarter': report_quarter,
-                'total_value': total_ipo_value,
-                'count': total_ipo_count,
-                'ipos': ipos_list
-            }
-            
-            # Create data directory if it doesn't exist
-            os.makedirs('data', exist_ok=True)
-            
-            # Save to JSON file
-            json_path = f'data/jp_morgan_ipo_{report_quarter}_{report_year}.json'
-            with open(json_path, 'w') as f:
-                json.dump(ipo_data, f, indent=2)
-            
-            st.success(f"✅ IPO data for {report_quarter} {report_year} saved successfully!")
-            st.info("📊 Navigate to 'IPO Activity' page to view the updated charts and details.")
-            st.balloons()
-            
-            # Clear cache
-            st.cache_data.clear()
+            if company and technology and deal_details and amount:
+                # Parse amount to numeric format (just the number, no formatting)
+                def parse_ipo_amount(val):
+                    if not val or val.lower() == 'undisclosed':
+                        return 'Undisclosed'
+                    val_str = val.upper().replace('$', '').replace(',', '').strip()
+                    try:
+                        if 'B' in val_str:
+                            num = float(val_str.replace('B', ''))
+                            return int(num * 1000000000)
+                        elif 'M' in val_str:
+                            num = float(val_str.replace('M', ''))
+                            return int(num * 1000000)
+                        else:
+                            return int(float(val_str))
+                    except:
+                        return 'Undisclosed'
+                
+                formatted_amount = parse_ipo_amount(amount)
+                
+                new_ipo = pd.DataFrame({
+                    'Company': [company],
+                    'Type': [ipo_type],
+                    'Technology': [technology],
+                    'Investors/Deal Details': [deal_details],
+                    'Amount': [formatted_amount],
+                    'Quarter': [quarter],
+                    'Date': [pd.to_datetime(date)]
+                })
+                
+                # Append to dataframe
+                ipo_df_updated = pd.concat([ipo_df, new_ipo], ignore_index=True)
+                
+                # Save data
+                if save_data(ma_df, inv_df, ipo_df_updated):
+                    st.success("✅ IPO added successfully!")
+                    st.balloons()
+                    # Clear cache to reload data
+                    st.cache_data.clear()
+                    st.rerun()
+            else:
+                st.error("Please fill in all required fields (*)")
 
 if __name__ == "__main__":
     main()
