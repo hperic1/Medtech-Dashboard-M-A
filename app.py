@@ -843,24 +843,6 @@ def show_data_management(ma_df, inv_df):
     """Data management page for adding deals and uploading JP Morgan reports"""
     st.header("Data Management")
     
-    # Add undo button at the top
-    if 'changes_made' in st.session_state and st.session_state.changes_made:
-        col1, col2, col3 = st.columns([1, 1, 4])
-        with col1:
-            if st.button("â†©ï¸ Undo Last Action", type="secondary", use_container_width=True):
-                success, message = undo_last_action()
-                if success:
-                    st.success(f"âœ… {message}")
-                    st.rerun()
-                else:
-                    st.error(f"âŒ {message}")
-        with col2:
-            if 'last_backup_time' in st.session_state:
-                st.caption(f"Last change: {st.session_state.last_backup_time.strftime('%I:%M %p')}")
-        
-        st.markdown("---")
-    
-    # Create tabs for different data management tasks
     tab1, tab2, tab3 = st.tabs(["ðŸ“ Add Manual Deals", "ðŸŒ Web Scraper", "ðŸ“Š Upload JP Morgan Report"])
     
     with tab1:
@@ -871,6 +853,23 @@ def show_data_management(ma_df, inv_df):
     
     with tab3:
         show_jp_morgan_upload()
+
+    
+    # Add undo button at the bottom
+    st.markdown("---")
+    if 'changes_made' in st.session_state and st.session_state.changes_made:
+        col1, col2, col3 = st.columns([1, 1, 4])
+        with col1:
+            if st.button("↩️ Undo Last Action", type="secondary", use_container_width=True):
+                success, message = undo_last_action()
+                if success:
+                    st.success(f"✅ {message}")
+                    st.rerun()
+                else:
+                    st.error(f"❌ {message}")
+        with col2:
+            if 'last_backup_time' in st.session_state:
+                st.caption(f"Last change: {st.session_state.last_backup_time.strftime('%I:%M %p')}")
 
 def show_manual_deal_entry(ma_df, inv_df):
     """Manual deal entry forms"""
@@ -1246,7 +1245,7 @@ def process_extracted_deals(extracted_deals, ma_df, inv_df):
 
 def show_text_parser(ma_df, inv_df):
     """Text parser for extracting deals from pasted article text"""
-    st.subheader("Text Parser - Extract Deals from Articles")
+    st.subheader("Deal Extraction - Extract Deals from Articles")
     
     st.info("""
     📋 **Paste article text or table data below**
