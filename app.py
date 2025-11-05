@@ -1300,6 +1300,7 @@ Value: Not disclosed""",
                 currency_rates = {
                     '£': 1.27,    # GBP
                     '€': 1.09,    # EUR
+                    '€': 1.09,    # EUR (alternative encoding)
                     'A$': 0.65,   # AUD
                     'AU$': 0.65,  # AUD
                     'CA$': 0.72,  # CAD
@@ -1321,7 +1322,7 @@ Value: Not disclosed""",
                     """Extract date and determine month/quarter"""
                     # Common date patterns
                     date_patterns = [
-                        r'(?:Date of Announcement:|Date:|Announced:)\s*([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})',
+                        r'(?:Date of Announcement:|Date:|Announced:|Date)\s*[:\s]*([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})',
                         r'(\d{1,2})/(\d{1,2})/(\d{4})',
                         r'(\d{4})-(\d{2})-(\d{2})',
                         r'([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})',
@@ -1334,13 +1335,36 @@ Value: Not disclosed""",
                             try:
                                 if len(groups) == 3:
                                     if groups[0].isdigit():  # Format: MM/DD/YYYY or YYYY-MM-DD
-                                        if int(groups[0]) > 12:  # YYYY-MM-DD
-                                            year, month_num, day = int(groups[0]), int(groups[1]), int(groups[2])
+                                        first_num = int(groups[0])
+                                        second_num = int(groups[1])
+                                        third_num = int(groups[2])
+                                        
+                                        if first_num > 12:  # YYYY-MM-DD
+                                            year, month_num, day = first_num, second_num, third_num
                                         else:  # MM/DD/YYYY
-                                            month_num, day, year = int(groups[0]), int(groups[1]), int(groups[2])
+                                            month_num, day, year = first_num, second_num, third_num
                                     else:  # Format: Month DD, YYYY
                                         month_name = groups[0]
-                                        month_num = list(calendar.month_name).index(month_name)
+                                        # Handle abbreviated months
+                                        month_map = {
+                                            'Jan': 'January', 'Feb': 'February', 'Mar': 'March',
+                                            'Apr': 'April', 'May': 'May', 'Jun': 'June',
+                                            'Jul': 'July', 'Aug': 'August', 'Sep': 'September',
+                                            'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+                                        }
+                                        for abbrev, full in month_map.items():
+                                            if month_name.startswith(abbrev):
+                                                month_name = full
+                                                break
+                                        
+                                        try:
+                                            month_num = list(calendar.month_name).index(month_name)
+                                        except ValueError:
+                                            # Try to find partial match
+                                            for idx, mname in enumerate(calendar.month_name):
+                                                if mname and month_name.lower().startswith(mname.lower()[:3]):
+                                                    month_num = idx
+                                                    break
                                         day = int(groups[1])
                                         year = int(groups[2])
                                     
@@ -1358,6 +1382,9 @@ Value: Not disclosed""",
                     """Parse deal value with currency conversion"""
                     if not value_text or 'not disclosed' in value_text.lower() or 'undisclosed' in value_text.lower():
                         return 'Undisclosed', ''
+                    
+                    # Remove modifiers like "approximately", "roughly", "~", "up to"
+                    value_text = re.sub(r'\b(?:approximately|roughly|about|around|up to|~)\b', '', value_text, flags=re.IGNORECASE).strip()
                     
                     # Look for currency symbols and amounts
                     currency_patterns = [
@@ -1400,8 +1427,12 @@ Value: Not disclosed""",
                     
                     return 'Undisclosed', ''
                 
-                # Split text into deal blocks (separated by blank lines or specific patterns)
-                deal_blocks = re.split(r'\n\s*\n+', article_text)
+                # Split text into deal blocks (separated by blank lines, bullets, or specific patterns)
+                # First, normalize bullet points
+                article_text = re.sub(r'^\s*[\*\•\-]\s+', '', article_text, flags=re.MULTILINE)
+                
+                # Split by blank lines OR by common separators
+                deal_blocks = re.split(r'\n\s*\n+|\*\s+(?=[A-Z])', article_text)
                 
                 extracted_deals = []
                 
@@ -1412,40 +1443,91 @@ Value: Not disclosed""",
                     # Extract company names (look for "—" or "acquires" or "raises" patterns)
                     deal_info = {}
                     
-                    # Pattern 1: "Acquirer—Company" format
-                    hyphen_match = re.search(r'([A-Z][A-Za-z\s&,\.]+?)\s*[—–-]\s*([A-Z][A-Za-z\s&,\.]+?)(?:\n|$)', block)
+                    # Pattern 1: "Acquirer—Company" format (with various dash types)
+                    hyphen_match = re.search(r'([A-Z][A-Za-z\s&,\.\']+?)\s*[—–-]\s*([A-Z][A-Za-z\s&,\.\']+?)(?:\s*[:|\n]|$)', block)
                     if hyphen_match:
                         deal_info['acquirer'] = hyphen_match.group(1).strip()
                         deal_info['company'] = hyphen_match.group(2).strip()
                         deal_info['type'] = 'M&A'
                     
-                    # Pattern 2: "Company will be acquired by Acquirer"
-                    acquired_match = re.search(r'([A-Z][A-Za-z\s&,\.]+?)\s+(?:will be|was|has been)\s+acquired by\s+(?:funds managed by\s+)?([A-Z][A-Za-z\s&,\.]+?)(?:,|\.|$)', block, re.IGNORECASE)
+                    # Pattern 2: "Company and Acquirer agreed to" or "Company and Acquirer Merge"
+                    merge_match = re.search(r'([A-Z][A-Za-z\s&,\.\']+?)\s+and\s+([A-Z][A-Za-z\s&,\.\']+?)\s+(?:agreed to a merger|merge|merged)', block, re.IGNORECASE)
+                    if merge_match and 'type' not in deal_info:
+                        deal_info['company'] = merge_match.group(1).strip()
+                        deal_info['acquirer'] = merge_match.group(2).strip()
+                        deal_info['type'] = 'M&A'
+                    
+                    # Pattern 3: "Company will be acquired by Acquirer"
+                    acquired_match = re.search(r'([A-Z][A-Za-z\s&,\.\']+?)\s+(?:will be|was|has been)\s+acquired by\s+(?:funds managed by\s+)?([A-Z][A-Za-z\s&,\.\']+?)(?:,|\.|$)', block, re.IGNORECASE)
                     if acquired_match and 'type' not in deal_info:
                         deal_info['company'] = acquired_match.group(1).strip()
                         deal_info['acquirer'] = acquired_match.group(2).strip()
                         deal_info['type'] = 'M&A'
                     
-                    # Pattern 3: "Acquirer acquires/purchases Company"
-                    acquires_match = re.search(r'([A-Z][A-Za-z\s&,\.]+?)\s+(?:acquires|purchases|buys)\s+([A-Z][A-Za-z\s&,\.]+?)(?:\s+for|\n|$)', block, re.IGNORECASE)
+                    # Pattern 4: "Acquirer agreed to acquire/acquired Company"
+                    agreed_acquire_match = re.search(r'([A-Z][A-Za-z\s&,\.\']+?)\s+(?:agreed to )?(?:acquire[ds]?)\s+([A-Z][A-Za-z\s&,\.\']+?)(?:\s+for|,|\.|$)', block, re.IGNORECASE)
+                    if agreed_acquire_match and 'type' not in deal_info:
+                        deal_info['acquirer'] = agreed_acquire_match.group(1).strip()
+                        deal_info['company'] = agreed_acquire_match.group(2).strip()
+                        deal_info['type'] = 'M&A'
+                    
+                    # Pattern 5: "Acquirer acquires/purchases Company"
+                    acquires_match = re.search(r'([A-Z][A-Za-z\s&,\.\']+?)\s+(?:acquires|purchases|buys|acquired|purchased|bought)\s+([A-Z][A-Za-z\s&,\.\']+?)(?:\s+for|\n|,|\.|$)', block, re.IGNORECASE)
                     if acquires_match and 'type' not in deal_info:
                         deal_info['acquirer'] = acquires_match.group(1).strip()
                         deal_info['company'] = acquires_match.group(2).strip()
                         deal_info['type'] = 'M&A'
                     
-                    # Pattern 4: "Company raises/secures $X" (Venture)
-                    raises_match = re.search(r'([A-Z][A-Za-z\s&,\.]+?)\s+(?:raises|raised|secures|secured)\s+[\$£€]', block, re.IGNORECASE)
+                    # Pattern 6: "Company raises/secures $X" (Venture)
+                    raises_match = re.search(r'([A-Z][A-Za-z\s&,\.\']+?)\s+(?:raises|raised|secures|secured)\s+[\$£€]', block, re.IGNORECASE)
                     if raises_match and 'type' not in deal_info:
                         deal_info['company'] = raises_match.group(1).strip()
                         deal_info['acquirer'] = ''
                         deal_info['type'] = 'Venture'
                     
-                    # Extract value
-                    value_match = re.search(r'Value:\s*(.+?)(?:\n|More info|$)', block, re.IGNORECASE)
-                    if value_match:
-                        parsed_value, conversion_note = parse_value(value_match.group(1))
-                        deal_info['value'] = parsed_value
-                        deal_info['conversion_note'] = conversion_note
+                    # Pattern 7: Table format - look for "Mergers and Acquisitions" or "Type" column
+                    if 'type' not in deal_info and 'mergers and acquisitions' in block.lower():
+                        deal_info['type'] = 'M&A'
+                        # Try to extract company name from start of line
+                        first_line = block.split('\n')[0]
+                        company_match = re.match(r'^([A-Z][A-Za-z\s&,\.\']+)', first_line)
+                        if company_match:
+                            deal_info['company'] = company_match.group(1).strip()
+                        
+                        # Look for acquirer in "Investors/Deal Details" section
+                        acquirer_match = re.search(r'(?:Investors/Deal Details|Deal Details)[:\n\s]+(.+?)(?:acquired|will acquire)', block, re.IGNORECASE)
+                        if acquirer_match:
+                            deal_info['acquirer'] = acquirer_match.group(1).strip()
+                        else:
+                            # Alternative: look for company name after "acquired" or "will acquire"
+                            alt_acquirer = re.search(r'([A-Z][A-Za-z\s&,\.\']+?)\s+(?:acquired|will acquire)', block)
+                            if alt_acquirer:
+                                deal_info['acquirer'] = alt_acquirer.group(1).strip()
+                            else:
+                                deal_info['acquirer'] = 'Undisclosed'
+                    
+                    # Extract value (multiple patterns)
+                    value_patterns = [
+                        r'Value:\s*(.+?)(?:\n|More info|$)',
+                        r'valued at\s+([^\n,\.]+?)(?:\s*upfront)?(?:,|\.|$)',
+                        r'for\s+([\$£€¥][\d,\.]+\s*(?:billion|million|B|M|bn)?)',
+                        r'(?:worth|price of)\s+([\$£€¥][\d,\.]+\s*(?:billion|million|B|M|bn)?)',
+                        r'Amount[:\s]+(.+?)(?:\n|$)',
+                    ]
+                    
+                    value_found = False
+                    for pattern in value_patterns:
+                        value_match = re.search(pattern, block, re.IGNORECASE)
+                        if value_match:
+                            parsed_value, conversion_note = parse_value(value_match.group(1))
+                            deal_info['value'] = parsed_value
+                            deal_info['conversion_note'] = conversion_note
+                            value_found = True
+                            break
+                    
+                    if not value_found:
+                        deal_info['value'] = 'Undisclosed'
+                        deal_info['conversion_note'] = ''
                     
                     # Extract date and determine month/quarter
                     month, quarter = extract_date_info(block)
