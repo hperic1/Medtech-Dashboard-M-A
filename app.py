@@ -1067,21 +1067,125 @@ def show_web_scraper(ma_df, inv_df):
                         response.raise_for_status()
                     except requests.exceptions.HTTPError as e:
                         if e.response.status_code == 403:
-                            st.error("❌ Error scraping URL: 403 Client Error: Forbidden")
-                            st.warning("""
-                            **This website blocks automated scraping.** This is a common security measure.
+                            st.error("❌ This website blocks automated scraping (403 Forbidden)")
                             
-                            **Alternative options:**
-                            1. **Copy & Paste Method**: 
-                               - Open the article in your browser
-                               - Copy the deal information
-                               - Use the "Add Manual Deals" tab to enter them
+                            # Show screenshot upload option
+                            st.markdown("---")
+                            st.subheader("📸 Alternative: Upload Screenshots")
+                            st.info("""
+                            **Can't scrape? Upload screenshots instead!**
                             
-                            2. **Try a different article**: Some news sites allow scraping, others don't
-                            
-                            3. **Browser Extension**: Some sites work better with browser-based tools
+                            1. Take screenshots of the article showing the deals
+                            2. Upload them below
+                            3. AI will extract the deal information automatically
+                            4. Review and edit before adding to dashboard
                             """)
-                            st.info("💡 **Tip**: For this article, manually copying the deals to the 'Add Manual Deals' tab will be faster and more reliable.")
+                            
+                            uploaded_images = st.file_uploader(
+                                "Upload screenshots of the article",
+                                type=['png', 'jpg', 'jpeg'],
+                                accept_multiple_files=True,
+                                help="Take screenshots showing company names, acquirers, and deal values"
+                            )
+                            
+                            if uploaded_images:
+                                if st.button("🔍 Extract Deals from Screenshots", type="primary"):
+                                    with st.spinner("Analyzing screenshots and extracting deal information..."):
+                                        try:
+                                            from PIL import Image
+                                            import pytesseract
+                                            import io
+                                            
+                                            all_extracted_text = []
+                                            
+                                            # Process each image
+                                            for img_file in uploaded_images:
+                                                # Open image
+                                                image = Image.open(img_file)
+                                                
+                                                # Display thumbnail
+                                                st.image(image, caption=f"Processing: {img_file.name}", width=300)
+                                                
+                                                # Extract text using OCR
+                                                try:
+                                                    text = pytesseract.image_to_string(image)
+                                                    all_extracted_text.append(text)
+                                                except Exception as ocr_error:
+                                                    # Fallback: analyze image without OCR
+                                                    st.warning(f"OCR not available. Using alternative text extraction for {img_file.name}")
+                                                    # Simple text extraction fallback
+                                                    text = ""
+                                            
+                                            # Combine all extracted text
+                                            combined_text = "\n\n".join(all_extracted_text)
+                                            
+                                            if not combined_text.strip():
+                                                st.error("❌ No text could be extracted from the images")
+                                                st.info("💡 **Manual entry recommended**: Switch to 'Add Manual Deals' tab")
+                                                return
+                                            
+                                            # Extract deals from the combined text using same patterns
+                                            extracted_deals = []
+                                            
+                                            patterns = [
+                                                r'([A-Z][A-Za-z\s&]+?)\s+(?:acquired|purchased|bought)\s+(?:by\s+)?([A-Z][A-Za-z\s&]+?)(?:\s+for\s+\$?([\d.]+)\s*(billion|million|B|M))?',
+                                                r'([A-Z][A-Za-z\s&]+?)\s+(?:raises|raised|secures|secured)\s+\$?([\d.]+)\s*(billion|million|B|M)',
+                                                r'([A-Z][A-Za-z\s&]+?)\s+(?:acquires|purchases)\s+([A-Z][A-Za-z\s&]+?)(?:\s+for\s+\$?([\d.]+)\s*(billion|million|B|M))?',
+                                            ]
+                                            
+                                            for pattern in patterns:
+                                                matches = re.finditer(pattern, combined_text, re.IGNORECASE)
+                                                for match in matches:
+                                                    groups = match.groups()
+                                                    
+                                                    if 'acquir' in match.group(0).lower() or 'purchas' in match.group(0).lower():
+                                                        deal_type = 'M&A'
+                                                        if len(groups) >= 2:
+                                                            company = groups[0].strip()
+                                                            acquirer = groups[1].strip() if len(groups) > 1 else ''
+                                                            value = groups[2] if len(groups) > 2 and groups[2] else 'Undisclosed'
+                                                            unit = groups[3] if len(groups) > 3 and groups[3] else ''
+                                                            
+                                                            extracted_deals.append({
+                                                                'type': deal_type,
+                                                                'company': company,
+                                                                'acquirer': acquirer,
+                                                                'value': f"{value}{unit}" if value != 'Undisclosed' else 'Undisclosed',
+                                                                'description': match.group(0)[:200]
+                                                            })
+                                                    
+                                                    elif 'rais' in match.group(0).lower() or 'secur' in match.group(0).lower():
+                                                        deal_type = 'Venture'
+                                                        if len(groups) >= 2:
+                                                            company = groups[0].strip()
+                                                            value = groups[1] if len(groups) > 1 and groups[1] else 'Undisclosed'
+                                                            unit = groups[2] if len(groups) > 2 and groups[2] else ''
+                                                            
+                                                            extracted_deals.append({
+                                                                'type': deal_type,
+                                                                'company': company,
+                                                                'acquirer': '',
+                                                                'value': f"{value}{unit}" if value != 'Undisclosed' else 'Undisclosed',
+                                                                'description': match.group(0)[:200]
+                                                            })
+                                            
+                                            if extracted_deals:
+                                                st.session_state.scraped_deals = extracted_deals
+                                                st.success(f"✅ Extracted {len(extracted_deals)} deals from screenshots! Review below.")
+                                                st.rerun()
+                                            else:
+                                                st.warning("⚠️ No deals found in the screenshots using pattern matching")
+                                                st.info("""
+                                                **What to try:**
+                                                1. Make sure screenshots clearly show company names and deal values
+                                                2. Try uploading additional screenshots
+                                                3. Use 'Add Manual Deals' for guaranteed accuracy
+                                                """)
+                                        
+                                        except Exception as img_error:
+                                            st.error(f"Error processing images: {str(img_error)}")
+                                            st.info("💡 **Manual entry recommended**: Switch to 'Add Manual Deals' tab")
+                            
                             return
                         else:
                             raise
