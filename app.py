@@ -75,6 +75,14 @@ def load_data():
         inv_df = inv_df.fillna('Undisclosed')
         ipo_df = ipo_df.fillna('Undisclosed')
         
+        # Special handling for Conference columns - leave blank instead of 'Undisclosed'
+        if 'Conference' in ma_df.columns:
+            ma_df['Conference'] = ma_df['Conference'].replace('Undisclosed', '')
+        if 'Conference' in inv_df.columns:
+            inv_df['Conference'] = inv_df['Conference'].replace('Undisclosed', '')
+        if 'Conference' in ipo_df.columns:
+            ipo_df['Conference'] = ipo_df['Conference'].replace('Undisclosed', '')
+        
         return ma_df, inv_df, ipo_df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
@@ -724,18 +732,54 @@ def show_jp_morgan_summary(ma_df, inv_df):
         st.markdown("")
         st.markdown("• **Q3 2025**: 65 medtech M&A deals were announced, totaling $21.7 billion in upfront cash and equity")
         st.markdown("")
-        st.markdown("**Overarching Trend**: Medtech M&A activity increased through Q3 2025, surpassing full-year 2024 numbers, with strategic consolidation driving large-scale transactions")
+        st.markdown("**Overarching Trend**: Medtech M&A activity accelerated in Q3 2025, recording the most active quarter since 2022. Medtech M&A value in Q3 2025 was ~487% higher than in Q3 2024. Spike driven by Waters Corp merger with Beckton Dickinson ($17.5 billion)")
         
     with col2:
         st.markdown("**Venture Capital**")
         st.markdown("")
-        st.markdown("• **Q1 2025**: Medtech venture investment activity continued to see larger rounds into fewer companies to post a higher dollar total for Q1 2025, exceeding Q1 2024")
+        st.markdown("• **Q1 2025**: $3.7 billion invested from 117 funding rounds")
         st.markdown("")
-        st.markdown("• **Q2 2025**: The medtech venture landscape continues to show resilience, with total venture funding reaching $6.8 billion in the first half of 2025, positioning the sector to potentially exceed 2024's $12.7 billion full-year total")
+        st.markdown("• **Q2 2025**: $2.6 billion invested from 90 venture rounds")
         st.markdown("")
-        st.markdown("• **Q3 2025**: Medtech venture funding started the year strong yet had a weaker Q2 and Q3 in a challenging venture funding environment across all of healthcare and life sciences")
+        st.markdown("• **Q3 2025**: $2.9 billion invested from 67 venture rounds")
         st.markdown("")
-        st.markdown("**Overarching Trend**: Late-stage venture rounds continue to dominate at $7.9B YTD, while early-stage funding remains selective as investors focus on companies with proven traction")
+        st.markdown("**Overarching Trend**: $2.9 billion was invested in Q3 2025 compared to $3.1 billion in Q3 2024. Despite Q3 being down slightly year over year, Q3 2025 continued a trend of large funding rounds, with Lila Sciences Series A ($235 million), Supira Medical's Series E ($120 million) and Set Point Medical's Series D ($115 million)")
+    
+    # Add company perspectives section
+    st.markdown("---")
+    st.subheader("Perspective on 2025 M&A from MedTech Leaders")
+    
+    st.markdown("""
+    <div style='background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin-top: 20px;'>
+        <div style='display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px;'>
+            <div>
+                <h4 style='color: #e2231a; margin-bottom: 10px;'>BD</h4>
+                <p style='font-size: 14px; margin-bottom: 5px;'><strong>BD: investing $2.5 billion in US manufacturing capacity over the next 5 years</strong></p>
+                <p style='font-size: 13px;'>In February 2025, BD announced they will spin off or sell their life sciences and diagnostics businesses to instead focus more closely on medical technology. This will allow them to reduce debt, reward existing shareholders with dividends or buybacks, and continue to broaden core business areas through increased R&D spend and selective M&A</p>
+            </div>
+            <div>
+                <h4 style='color: #d51f29; margin-bottom: 10px;'>Johnson & Johnson MedTech</h4>
+                <p style='font-size: 14px; margin-bottom: 5px;'><strong>Johnson and Johnson MedTech facing headwinds with Asia Pacific, particularly China</strong></p>
+                <p style='font-size: 13px;'>Sales in the Asia Pacific, particularly China are being hurt by the impact of the volume-based procurement (VBP) program and the anticorruption campaign. Deals like Abiomed ($16.6B) and Shockwave ($13.1B) are outlier deals for JnJ MedTech according to CEO</p>
+            </div>
+            <div>
+                <h4 style='color: #0087cb; margin-bottom: 10px;'>GE HealthCare</h4>
+                <p style='font-size: 14px; margin-bottom: 5px;'><strong>GE Healthcare is focused on precision care, growth, and business optimization</strong></p>
+                <p style='font-size: 13px;'>According to the presentation at the JP Morgan Healthcare Conference, GE Healthcare could be ready for more M&A in 2025 as it has a strong balance sheet</p>
+            </div>
+            <div>
+                <h4 style='color: #004b87; margin-bottom: 10px;'>Medtronic</h4>
+                <p style='font-size: 14px; margin-bottom: 5px;'><strong>Medtronic is preparing for a strategic transaction this year</strong></p>
+                <p style='font-size: 13px;'>CEO Geoff Martha said the company can be more aggressive on the M&A front but it has to be for a product gap in an area Medtronic is already in or adding an adjacency to an existing area. He stated a "couple billion dollars" is what they are preparing for but the target would be close to a revenue-generating stage</p>
+            </div>
+            <div>
+                <h4 style='color: #005eb8; margin-bottom: 10px;'>Baxter</h4>
+                <p style='font-size: 14px; margin-bottom: 5px;'><strong>Baxter is not seeking out any large deals that don't align with their current offerings</strong></p>
+                <p style='font-size: 13px;'>Not looking for large transformational deals; They are looking for tuck in deals in areas they have had a lot of success in historically, according to Baxter CFO at JP Morgan Healthcare Conference</p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Add YTD comparison section
     st.markdown("---")
