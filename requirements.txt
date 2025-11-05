@@ -1,6 +1,7 @@
 streamlit
 pandas
-openpyxl
 plotly
+openpyxl
+PyPDF2
 requests
 beautifulsoup4

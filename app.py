@@ -1386,7 +1386,12 @@ def show_web_scraper(ma_df, inv_df):
     if extract_pdf_button and uploaded_pdf:
         with st.spinner("Reading PDF and extracting deal information..."):
             try:
-                import PyPDF2
+                try:
+                    import PyPDF2
+                except ImportError:
+                    st.error("❌ PyPDF2 is not installed")
+                    st.info("💡 Run: `pip install PyPDF2` or use manual entry instead")
+                    return
                 import io
                 import re
                 
