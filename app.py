@@ -1047,10 +1047,44 @@ def show_web_scraper(ma_df, inv_df):
                     from bs4 import BeautifulSoup
                     import re
                     
-                    # Fetch the webpage
-                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-                    response = requests.get(url, headers=headers, timeout=10)
-                    response.raise_for_status()
+                    # Fetch the webpage with better headers to avoid 403 errors
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.5',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'DNT': '1',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'none',
+                        'Cache-Control': 'max-age=0'
+                    }
+                    
+                    try:
+                        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+                        response.raise_for_status()
+                    except requests.exceptions.HTTPError as e:
+                        if e.response.status_code == 403:
+                            st.error("❌ Error scraping URL: 403 Client Error: Forbidden")
+                            st.warning("""
+                            **This website blocks automated scraping.** This is a common security measure.
+                            
+                            **Alternative options:**
+                            1. **Copy & Paste Method**: 
+                               - Open the article in your browser
+                               - Copy the deal information
+                               - Use the "Add Manual Deals" tab to enter them
+                            
+                            2. **Try a different article**: Some news sites allow scraping, others don't
+                            
+                            3. **Browser Extension**: Some sites work better with browser-based tools
+                            """)
+                            st.info("💡 **Tip**: For this article, manually copying the deals to the 'Add Manual Deals' tab will be faster and more reliable.")
+                            return
+                        else:
+                            raise
                     
                     # Parse with BeautifulSoup
                     soup = BeautifulSoup(response.content, 'html.parser')
@@ -1124,8 +1158,25 @@ def show_web_scraper(ma_df, inv_df):
                         st.info("💡 The scraper looks for patterns like 'Company acquired by Acquirer' or 'Company raises $XXM'")
                 
                 except Exception as e:
-                    st.error(f"❌ Error scraping URL: {str(e)}")
-                    st.info("💡 Try copying the deal information and using the manual entry form instead.")
+                    error_msg = str(e)
+                    st.error(f"❌ Error scraping URL: {error_msg}")
+                    
+                    if "403" in error_msg or "Forbidden" in error_msg:
+                        st.warning("""
+                        **This website blocks automated scraping.**
+                        
+                        **What to do:**
+                        1. Open the article in your browser
+                        2. Copy the deal information (company names, acquirers, values)
+                        3. Switch to the "Add Manual Deals" tab
+                        4. Enter each deal manually (much faster than you think!)
+                        """)
+                    elif "timeout" in error_msg.lower():
+                        st.warning("⏱️ The website took too long to respond. Try again or use manual entry.")
+                    elif "404" in error_msg:
+                        st.warning("🔍 Page not found. Please check the URL and try again.")
+                    else:
+                        st.info("💡 **Tip**: When scraping fails, the manual entry form is your best option. Just copy the deal info from the article and paste it in!")
         else:
             st.warning("Please enter a URL")
     
