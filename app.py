@@ -418,7 +418,12 @@ def show_deal_activity(ma_df, inv_df):
     tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
     
     with tab1:
-        st.dataframe(filtered_inv, use_container_width=True, height=400)
+        # Format Amount Raised column for display
+        inv_display = filtered_inv.copy()
+        inv_display['Amount Raised'] = inv_display['Amount Raised'].apply(
+            lambda x: f"${x:,.0f}" if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else x
+        )
+        st.dataframe(inv_display, use_container_width=True, height=400)
     
     with tab2:
         # Top 3 deals
@@ -439,10 +444,17 @@ def show_deal_activity(ma_df, inv_df):
         top_deals = top_deals.nlargest(3, 'Amount_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Value is already in actual dollars, just use it directly from Excel
-            formatted_value = str(row['Amount Raised']) if row['Amount Raised'] != 'Undisclosed' else 'Undisclosed'
+            # Format amount with commas
+            amount_val = row['Amount Raised']
+            if pd.notna(amount_val) and amount_val != 'Undisclosed':
+                try:
+                    formatted_value = f"${float(amount_val):,.0f}"
+                except:
+                    formatted_value = str(amount_val)
+            else:
+                formatted_value = "Undisclosed"
             
-            # Display with value directly from Excel (already formatted)
+            # Display with formatted value
             st.markdown(f"**{row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
@@ -481,23 +493,25 @@ def show_jp_morgan_summary():
     
     with col1:
         st.markdown("**M&A Activity**")
-        st.markdown("""
-        • **Q1 2025**: 57 medtech M&A deals were announced, totaling $9.2 billion
-        
-        • **Q2 2025**: 43 medtech M&A deals were announced, totaling $2.1 billion  
-        
-        • **Q3 2025**: 65 medtech M&A deals were announced, totaling $21.7 billion in upfront cash and equity
-        """)
+        st.markdown("")
+        st.markdown("• **Q1 2025**: 57 medtech M&A deals were announced, totaling $9.2 billion")
+        st.markdown("")
+        st.markdown("• **Q2 2025**: 43 medtech M&A deals were announced, totaling $2.1 billion")
+        st.markdown("")
+        st.markdown("• **Q3 2025**: 65 medtech M&A deals were announced, totaling $21.7 billion in upfront cash and equity")
+        st.markdown("")
+        st.markdown("**Overarching Trend**: Medtech M&A activity increased through Q3 2025, surpassing full-year 2024 numbers, with strategic consolidation driving large-scale transactions")
         
     with col2:
         st.markdown("**Venture Capital**")
-        st.markdown("""
-        • **Q1 2025**: Medtech venture investment activity continued to see larger rounds into fewer companies to post a higher dollar total for Q1 2025, exceeding Q1 2024
-        
-        • **Q2 2025**: The medtech venture landscape continues to show resilience, with total venture funding reaching $6.8 billion in the first half of 2025, positioning the sector to potentially exceed 2024's $12.7 billion full-year total
-        
-        • **Q3 2025**: Medtech venture funding started the year strong yet had a weaker Q2 and Q3 in a challenging venture funding environment across all of healthcare and life sciences
-        """)
+        st.markdown("")
+        st.markdown("• **Q1 2025**: Medtech venture investment activity continued to see larger rounds into fewer companies to post a higher dollar total for Q1 2025, exceeding Q1 2024")
+        st.markdown("")
+        st.markdown("• **Q2 2025**: The medtech venture landscape continues to show resilience, with total venture funding reaching $6.8 billion in the first half of 2025, positioning the sector to potentially exceed 2024's $12.7 billion full-year total")
+        st.markdown("")
+        st.markdown("• **Q3 2025**: Medtech venture funding started the year strong yet had a weaker Q2 and Q3 in a challenging venture funding environment across all of healthcare and life sciences")
+        st.markdown("")
+        st.markdown("**Overarching Trend**: Late-stage venture rounds continue to dominate at $7.9B YTD, while early-stage funding remains selective as investors focus on companies with proven traction")
 
 def show_data_management(ma_df, inv_df):
     """Data management page for adding deals and uploading JP Morgan reports"""
