@@ -1136,7 +1136,6 @@ def show_web_scraper(ma_df, inv_df):
         st.markdown(f"**{len(st.session_state.scraped_deals)} deals found** - Edit or remove deals before adding to dashboard:")
         
         deals_to_add = []
-        deals_to_remove = []
         
         for idx, deal in enumerate(st.session_state.scraped_deals):
             with st.expander(f"Deal {idx + 1}: {deal['company']}", expanded=True):
@@ -1144,7 +1143,9 @@ def show_web_scraper(ma_df, inv_df):
                 col_delete, col_spacer = st.columns([1, 5])
                 with col_delete:
                     if st.button(f"🗑️ Remove", key=f"delete_{idx}", type="secondary", use_container_width=True):
-                        deals_to_remove.append(idx)
+                        # Remove this deal from the list
+                        st.session_state.scraped_deals.pop(idx)
+                        st.success(f"Removed deal: {deal['company']}")
                         st.rerun()
                 
                 col1, col2 = st.columns(2)
@@ -1202,12 +1203,6 @@ def show_web_scraper(ma_df, inv_df):
                         'quarter': quarter,
                         'month': month
                     })
-        
-        # Remove deals if any were marked for deletion
-        if deals_to_remove:
-            for idx in sorted(deals_to_remove, reverse=True):
-                st.session_state.scraped_deals.pop(idx)
-            st.rerun()
         
         # Add action buttons
         st.markdown("---")
