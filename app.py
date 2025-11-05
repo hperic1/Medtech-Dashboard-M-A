@@ -232,8 +232,12 @@ def format_whole_number(num):
 def create_quarterly_chart(df, value_col, title):
     """Create quarterly stacked bar chart with deal count overlay - NO GRIDLINES"""
     try:
+        # Extract just the quarter part (Q1, Q2, etc.) from "Q1 2025" format
+        df_temp = df.copy()
+        df_temp['Quarter_Short'] = df_temp['Quarter'].apply(lambda x: str(x).split()[0] if pd.notna(x) else 'Q1')
+        
         # Prepare data using universal parser
-        quarterly_data = df.groupby('Quarter').agg({
+        quarterly_data = df_temp.groupby('Quarter_Short').agg({
             value_col: lambda x: sum([parse_currency_to_number(v) for v in x]),
             'Company': 'count'
         }).reset_index()
@@ -246,8 +250,6 @@ def create_quarterly_chart(df, value_col, title):
         
         # Create figure
         fig = go.Figure()
-        
-        # Keep values as whole numbers (already in dollars)
         
         # Add bar chart for deal values
         fig.add_trace(go.Bar(
@@ -549,9 +551,12 @@ def show_deal_activity(ma_df, inv_df):
             st.markdown("---")
     
     with tab3:
-        fig = create_quarterly_chart(filtered_ma, 'Deal Value', 'M&A Activity by Quarter')
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
+        if len(filtered_ma) > 0:
+            fig = create_quarterly_chart(filtered_ma, 'Deal Value', 'M&A Activity by Quarter')
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No data available for the selected filters.")
     
     # Add spacing between sections
     st.markdown("---")
@@ -643,9 +648,12 @@ def show_deal_activity(ma_df, inv_df):
             st.markdown("---")
     
     with tab3:
-        fig = create_quarterly_chart(filtered_inv, 'Amount Raised', 'Venture Investment by Quarter')
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
+        if len(filtered_inv) > 0:
+            fig = create_quarterly_chart(filtered_inv, 'Amount Raised', 'Venture Investment by Quarter')
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No data available for the selected filters.")
 
 def show_jp_morgan_summary(ma_df, inv_df):
     """Display JP Morgan summary"""
@@ -653,7 +661,8 @@ def show_jp_morgan_summary(ma_df, inv_df):
     
     # Calculate BeaconOne quarterly stats
     def calc_quarterly_stats(df, quarter, value_col):
-        q_data = df[df['Quarter'] == quarter]
+        # Filter by quarter - handle both "Q1" and "Q1 2025" formats
+        q_data = df[df['Quarter'].str.contains(quarter, na=False)]
         
         # Use universal parser
         total_value = sum(q_data[value_col].apply(parse_currency_to_number))
@@ -908,15 +917,18 @@ def show_ipo_activity(ipo_df):
     # Parse Amount column using universal parser
     ipo_df['Amount_Numeric'] = ipo_df['Amount'].apply(parse_currency_to_number)
     
+    # Extract just the quarter part (Q1, Q2, etc.) for grouping
+    ipo_df['Quarter_Short'] = ipo_df['Quarter'].apply(lambda x: str(x).split()[0] if pd.notna(x) else 'Q1')
+    
     # Calculate quarterly stats
-    quarterly_data = ipo_df.groupby('Quarter').agg({
+    quarterly_data = ipo_df.groupby('Quarter_Short').agg({
         'Amount_Numeric': 'sum',
         'Company': 'count'
     }).reset_index()
     quarterly_data.columns = ['Quarter', 'Total_Value', 'IPO_Count']
     
     # Sort quarters
-    quarter_order = ['Q1 2025', 'Q2 2025', 'Q3 2025', 'Q4 2025']
+    quarter_order = ['Q1', 'Q2', 'Q3', 'Q4']
     quarterly_data['Quarter'] = pd.Categorical(quarterly_data['Quarter'], categories=quarter_order, ordered=True)
     quarterly_data = quarterly_data.sort_values('Quarter').reset_index(drop=True)
     
