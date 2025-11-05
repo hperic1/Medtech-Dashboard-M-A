@@ -861,13 +861,13 @@ def show_data_management(ma_df, inv_df):
         st.markdown("---")
     
     # Create tabs for different data management tasks
-    tab1, tab2, tab3 = st.tabs(["📝 Add Manual Deals", "🌐 Web Scraper", "📊 Upload JP Morgan Report"])
+    tab1, tab2, tab3 = st.tabs(["📝 Add Manual Deals", "🔍 Data Extraction", "📊 Upload JP Morgan Report"])
     
     with tab1:
         show_manual_deal_entry(ma_df, inv_df)
     
     with tab2:
-        show_web_scraper(ma_df, inv_df)
+        show_data_extraction(ma_df, inv_df)
     
     with tab3:
         show_jp_morgan_upload()
@@ -1020,507 +1020,473 @@ def show_manual_deal_entry(ma_df, inv_df):
                 else:
                     st.error("Please fill in all required fields (*)")
 
-def show_web_scraper(ma_df, inv_df):
-    """Web scraper for extracting deals from news articles and websites"""
-    st.subheader("Web Scraper - Extract Deals from Articles")
+def process_extracted_deals(extracted_deals, ma_df, inv_df):
+    """Common function to process and save extracted deals"""
+    if not extracted_deals:
+        return
+    
+    st.markdown("---")
+    st.subheader("Review Extracted Deals")
+    st.markdown(f"**{len(extracted_deals)} deals found** - Edit or remove deals before adding to dashboard:")
+    
+    deals_to_add = []
+    
+    for idx, deal in enumerate(extracted_deals):
+        with st.expander(f"Deal {idx + 1}: {deal['company']}", expanded=True):
+            # Show conversion note if applicable
+            if deal.get('conversion_note'):
+                st.info(f"💱 Currency converted{deal['conversion_note']}")
+            
+            # Add delete button at the top right
+            col_delete, col_spacer = st.columns([1, 5])
+            with col_delete:
+                if st.button(f"🗑️ Remove", key=f"delete_{idx}", type="secondary", use_container_width=True):
+                    # Remove this deal from the list
+                    st.session_state.scraped_deals.pop(idx)
+                    st.success(f"Removed deal: {deal['company']}")
+                    st.rerun()
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                deal_type_select = st.selectbox(
+                    "Deal Type*", 
+                    ["M&A Activity", "Venture Investment"],
+                    index=0 if deal['type'] == 'M&A' else 1,
+                    key=f"type_{idx}"
+                )
+                
+                company = st.text_input("Company*", value=deal['company'], key=f"company_{idx}")
+                
+                if deal_type_select == "M&A Activity":
+                    acquirer = st.text_input("Acquirer*", value=deal.get('acquirer', ''), key=f"acquirer_{idx}")
+                    deal_subtype = st.selectbox("Deal Subtype*", ["Acquisition", "Merger"], key=f"subtype_{idx}")
+                else:
+                    funding_type = st.selectbox("Funding Type*", ["VC", "PE"], key=f"funding_{idx}")
+                    lead_investors = st.text_input("Lead Investors", key=f"investors_{idx}")
+            
+            with col2:
+                technology = st.text_area("Technology/Description*", value=deal.get('description', ''), height=100, key=f"tech_{idx}")
+                deal_value = st.text_input("Deal Value (e.g., 100M, 1.5B, or Undisclosed)", value=deal.get('value', 'Undisclosed'), key=f"value_{idx}")
+                
+            col3, col4 = st.columns(2)
+            with col3:
+                # Pre-fill quarter if extracted
+                quarter_options = ["Q1", "Q2", "Q3", "Q4"]
+                default_quarter_idx = 0
+                if 'quarter' in deal and deal['quarter'] in quarter_options:
+                    default_quarter_idx = quarter_options.index(deal['quarter'])
+                quarter = st.selectbox("Quarter*", quarter_options, index=default_quarter_idx, key=f"quarter_{idx}")
+            with col4:
+                # Pre-fill month if extracted
+                month_options = [
+                    "January", "February", "March", "April", "May", "June",
+                    "July", "August", "September", "October", "November", "December"
+                ]
+                default_month_idx = 0
+                if 'month' in deal and deal['month'] in month_options:
+                    default_month_idx = month_options.index(deal['month'])
+                month = st.selectbox("Month*", month_options, index=default_month_idx, key=f"month_{idx}")
+            
+            # Store edited deal info
+            if deal_type_select == "M&A Activity":
+                deals_to_add.append({
+                    'type': 'M&A',
+                    'company': company,
+                    'acquirer': acquirer,
+                    'deal_subtype': deal_subtype,
+                    'technology': technology,
+                    'value': deal_value,
+                    'quarter': quarter,
+                    'month': month
+                })
+            else:
+                deals_to_add.append({
+                    'type': 'Venture',
+                    'company': company,
+                    'funding_type': funding_type,
+                    'lead_investors': lead_investors,
+                    'technology': technology,
+                    'value': deal_value,
+                    'quarter': quarter,
+                    'month': month
+                })
+    
+    # Add action buttons
+    st.markdown("---")
+    col1, col2, col3 = st.columns([2, 2, 2])
+    
+    with col1:
+        add_all_clicked = st.button("✅ Add All Deals to Dashboard", type="primary", use_container_width=True)
+    
+    with col2:
+        if st.button("🗑️ Clear All Deals", type="secondary", use_container_width=True):
+            st.session_state.scraped_deals = []
+            st.success("All deals cleared!")
+            st.rerun()
+    
+    with col3:
+        st.metric("Deals to Add", len(deals_to_add))
+    
+    # Only proceed with adding if the Add All button was clicked
+    if add_all_clicked:
+        ma_updated = ma_df.copy()
+        inv_updated = inv_df.copy()
+        
+        added_ma = 0
+        added_inv = 0
+        skipped_duplicates = []
+        
+        for deal in deals_to_add:
+            if deal['type'] == 'M&A':
+                # Parse and format deal value
+                def parse_deal_input(val):
+                    if not val or val.lower() == 'undisclosed':
+                        return 'Undisclosed'
+                    val_str = val.upper().replace('$', '').replace(',', '').strip()
+                    try:
+                        if 'B' in val_str:
+                            num = float(val_str.replace('B', '').replace('ILLION', ''))
+                            return f"${num * 1000000000:,.0f}"
+                        elif 'M' in val_str:
+                            num = float(val_str.replace('M', '').replace('ILLION', ''))
+                            return f"${num * 1000000:,.0f}"
+                        else:
+                            return f"${float(val_str):,.0f}"
+                    except:
+                        return 'Undisclosed'
+                
+                formatted_value = parse_deal_input(deal['value'])
+                
+                # Check for duplicates - compare company name and deal value
+                is_duplicate = False
+                for idx, existing_row in ma_updated.iterrows():
+                    existing_company = str(existing_row['Company']).strip().lower()
+                    existing_value = str(existing_row['Deal Value']).strip()
+                    
+                    new_company = deal['company'].strip().lower()
+                    
+                    # Compare company names (exact match or very similar)
+                    if existing_company == new_company or existing_company in new_company or new_company in existing_company:
+                        # Compare deal values
+                        if existing_value == formatted_value:
+                            is_duplicate = True
+                            skipped_duplicates.append(f"M&A: {deal['company']} ({formatted_value})")
+                            break
+                
+                if not is_duplicate:
+                    new_deal = pd.DataFrame({
+                        'Company': [deal['company']],
+                        'Acquirer': [deal['acquirer']],
+                        'Deal Type (Merger / Acquisition)': [deal['deal_subtype']],
+                        'Technology/Description': [deal['technology']],
+                        'Deal Value': [formatted_value],
+                        'Quarter': [deal['quarter']],
+                        'Month': [deal['month']]
+                    })
+                    ma_updated = pd.concat([ma_updated, new_deal], ignore_index=True)
+                    added_ma += 1
+            
+            else:  # Venture
+                # Parse and format amount
+                def parse_amount_input(val):
+                    if not val or val.lower() == 'undisclosed':
+                        return 'Undisclosed'
+                    val_str = val.upper().replace('$', '').replace(',', '').strip()
+                    try:
+                        if 'B' in val_str:
+                            num = float(val_str.replace('B', '').replace('ILLION', ''))
+                            return int(num * 1000000000)
+                        elif 'M' in val_str:
+                            num = float(val_str.replace('M', '').replace('ILLION', ''))
+                            return int(num * 1000000)
+                        else:
+                            return int(float(val_str))
+                    except:
+                        return 'Undisclosed'
+                
+                formatted_amount = parse_amount_input(deal['value'])
+                
+                # Check for duplicates - compare company name and amount
+                is_duplicate = False
+                for idx, existing_row in inv_updated.iterrows():
+                    existing_company = str(existing_row['Company']).strip().lower()
+                    existing_amount = str(existing_row['Amount Raised']).strip()
+                    
+                    new_company = deal['company'].strip().lower()
+                    
+                    # Compare company names (exact match or very similar)
+                    if existing_company == new_company or existing_company in new_company or new_company in existing_company:
+                        # Compare amounts
+                        if str(formatted_amount) == existing_amount:
+                            is_duplicate = True
+                            # Format for display
+                            if formatted_amount != 'Undisclosed':
+                                display_val = f"${formatted_amount:,}"
+                            else:
+                                display_val = 'Undisclosed'
+                            skipped_duplicates.append(f"Venture: {deal['company']} ({display_val})")
+                            break
+                
+                if not is_duplicate:
+                    new_deal = pd.DataFrame({
+                        'Company': [deal['company']],
+                        'Funding type (VC / PE)': [deal['funding_type']],
+                        'Technology/Description': [deal['technology']],
+                        'Amount Raised': [formatted_amount],
+                        'Lead Investors': [deal.get('lead_investors', 'Undisclosed')],
+                        'Quarter': [deal['quarter']],
+                        'Month': [deal['month']]
+                    })
+                    inv_updated = pd.concat([inv_updated, new_deal], ignore_index=True)
+                    added_inv += 1
+        
+        # Save data
+        if save_data(ma_updated, inv_updated):
+            success_msg = f"✅ Successfully added {added_ma} M&A deals and {added_inv} Venture deals!"
+            if skipped_duplicates:
+                success_msg += f"\n\n⚠️ Skipped {len(skipped_duplicates)} duplicate(s):"
+                for dup in skipped_duplicates:
+                    success_msg += f"\n• {dup}"
+            
+            st.success(success_msg)
+            if added_ma > 0 or added_inv > 0:
+                st.balloons()
+            # Clear session state
+            st.session_state.scraped_deals = []
+            # Clear cache to reload data
+            st.cache_data.clear()
+            st.rerun()
+
+def show_data_extraction(ma_df, inv_df):
+    """Data extraction from pasted article text"""
+    st.subheader("Data Extraction - Extract Deals from Article Text")
     
     st.info("""
-    🌐 **How it works:**
-    1. Paste a URL from a news article or press release about MedTech deals
-    2. Click "Scrape Deals" to automatically extract deal information
-    3. Review and edit the extracted data
-    4. Select whether each deal is M&A or Venture Investment
-    5. Click "Add to Dashboard" to save all deals
-    
-    **Supported sites:** Press releases, news articles, industry reports with deal information
+    📋 **How to use:**
+    1. Copy article text (including deal information, dates, values)
+    2. Paste into the text box below
+    3. Click "Extract Deals" to automatically parse the information
+    4. Review and edit extracted deals before adding to dashboard
     """)
     
-    # URL input
-    url = st.text_input("Enter Article URL", placeholder="https://example.com/medtech-deals-2025", key="scraper_url")
+    # Text area for pasting article content
+    article_text = st.text_area(
+        "Paste Article Text Here",
+        height=300,
+        placeholder="""Example:
+Blackstone & TPG—Hologic
+Hologic will be acquired by funds managed by Blackstone and TPG, privatizing the company.
+Date of Announcement: October 21, 2025
+Value: $79/share, enterprise value up to $18.3 billion
+
+Allegheny—Holbrook Tool and Molding
+This strategic acquisition strengthens Allegheny's capabilities...
+Date of Announcement: October 17, 2025
+Value: Not disclosed""",
+        key="article_text_input"
+    )
     
-    if st.button("🔍 Scrape Deals", type="primary"):
-        if url:
-            with st.spinner("Fetching and analyzing article..."):
-                try:
-                    # Use web_fetch to get the content
-                    import requests
-                    from bs4 import BeautifulSoup
-                    import re
-                    
-                    # Fetch the webpage with better headers to avoid 403 errors
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.5',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'DNT': '1',
-                        'Connection': 'keep-alive',
-                        'Upgrade-Insecure-Requests': '1',
-                        'Sec-Fetch-Dest': 'document',
-                        'Sec-Fetch-Mode': 'navigate',
-                        'Sec-Fetch-Site': 'none',
-                        'Cache-Control': 'max-age=0'
-                    }
-                    
-                    try:
-                        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
-                        response.raise_for_status()
-                    except requests.exceptions.HTTPError as e:
-                        if e.response.status_code == 403:
-                            st.error("❌ This website blocks automated scraping (403 Forbidden)")
-                            
-                            # Show PDF upload option
-                            st.markdown("---")
-                            st.subheader("📄 Alternative: Upload PDF")
-                            st.info("""
-                            **Can't scrape? Upload a PDF instead!**
-                            
-                            1. Print the webpage as PDF (Ctrl+P → Save as PDF)
-                            2. Upload the PDF below
-                            3. AI will extract all deal information automatically
-                            4. Review and edit before adding to dashboard
-                            
-                            **This works great for blocked websites!**
-                            """)
-                            
-                            uploaded_pdf = st.file_uploader(
-                                "Upload PDF of the article",
-                                type=['pdf'],
-                                help="Print the webpage as PDF and upload it here"
-                            )
-                            
-                            if uploaded_pdf:
-                                if st.button("🔍 Extract Deals from PDF", type="primary"):
-                                    with st.spinner("Reading PDF and extracting deal information..."):
-                                        try:
-                                            import PyPDF2
-                                            import io
-                                            
-                                            # Read PDF
-                                            pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_pdf.read()))
-                                            
-                                            # Extract text from all pages
-                                            all_text = []
-                                            for page_num, page in enumerate(pdf_reader.pages):
-                                                text = page.extract_text()
-                                                all_text.append(text)
-                                                st.success(f"✓ Processed page {page_num + 1} of {len(pdf_reader.pages)}")
-                                            
-                                            combined_text = "\n\n".join(all_text)
-                                            
-                                            if not combined_text.strip():
-                                                st.error("❌ No text could be extracted from the PDF")
-                                                st.info("💡 **Try**: Make sure the PDF contains selectable text (not scanned images)")
-                                                return
-                                            
-                                            st.success(f"✅ Extracted {len(combined_text)} characters from PDF")
-                                            
-                                            # Extract deals from the text using same patterns
-                                            extracted_deals = []
-                                            
-                                            patterns = [
-                                                r'([A-Z][A-Za-z\s&\.]+?)\s+(?:acquired|purchased|bought)\s+(?:by\s+)?([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
-                                                r'([A-Z][A-Za-z\s&\.]+?)\s+(?:raises|raised|secures|secured)\s+\$?([\d,\.]+)\s*(billion|million|B|M)',
-                                                r'([A-Z][A-Za-z\s&\.]+?)\s+(?:acquires|purchases|buys)\s+([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
-                                                r'([A-Z][A-Za-z\s&\.]+?)\s+to\s+(?:acquire|purchase|buy)\s+([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
-                                            ]
-                                            
-                                            for pattern in patterns:
-                                                matches = re.finditer(pattern, combined_text, re.IGNORECASE | re.MULTILINE)
-                                                for match in matches:
-                                                    groups = match.groups()
-                                                    match_text = match.group(0).lower()
-                                                    
-                                                    if 'acquir' in match_text or 'purchas' in match_text or 'bought' in match_text or 'buys' in match_text:
-                                                        deal_type = 'M&A'
-                                                        if len(groups) >= 2:
-                                                            company = groups[0].strip()
-                                                            acquirer = groups[1].strip() if len(groups) > 1 else ''
-                                                            value = groups[2] if len(groups) > 2 and groups[2] else 'Undisclosed'
-                                                            unit = groups[3] if len(groups) > 3 and groups[3] else ''
-                                                            
-                                                            # Clean up value
-                                                            if value != 'Undisclosed':
-                                                                value = value.replace(',', '')
-                                                            
-                                                            extracted_deals.append({
-                                                                'type': deal_type,
-                                                                'company': company,
-                                                                'acquirer': acquirer,
-                                                                'value': f"{value}{unit}" if value != 'Undisclosed' else 'Undisclosed',
-                                                                'description': match.group(0)[:200]
-                                                            })
-                                                    
-                                                    elif 'rais' in match_text or 'secur' in match_text:
-                                                        deal_type = 'Venture'
-                                                        if len(groups) >= 2:
-                                                            company = groups[0].strip()
-                                                            value = groups[1] if len(groups) > 1 and groups[1] else 'Undisclosed'
-                                                            unit = groups[2] if len(groups) > 2 and groups[2] else ''
-                                                            
-                                                            # Clean up value
-                                                            if value != 'Undisclosed':
-                                                                value = value.replace(',', '')
-                                                            
-                                                            extracted_deals.append({
-                                                                'type': deal_type,
-                                                                'company': company,
-                                                                'acquirer': '',
-                                                                'value': f"{value}{unit}" if value != 'Undisclosed' else 'Undisclosed',
-                                                                'description': match.group(0)[:200]
-                                                            })
-                                            
-                                            # Remove duplicates based on company name
-                                            seen = set()
-                                            unique_deals = []
-                                            for deal in extracted_deals:
-                                                key = (deal['company'].lower(), deal['value'])
-                                                if key not in seen:
-                                                    seen.add(key)
-                                                    unique_deals.append(deal)
-                                            
-                                            if unique_deals:
-                                                st.session_state.scraped_deals = unique_deals
-                                                st.success(f"✅ Extracted {len(unique_deals)} deals from PDF! Review and edit below.")
-                                                st.rerun()
-                                            else:
-                                                st.warning("⚠️ No deals found in the PDF using pattern matching")
-                                                st.info("""
-                                                **What to try:**
-                                                1. Make sure the PDF contains the full article text
-                                                2. Check if deals are mentioned with phrases like "acquired by" or "raises $"
-                                                3. Use 'Add Manual Deals' tab for guaranteed accuracy
-                                                
-                                                **Tip**: You can see the extracted text to verify the PDF loaded correctly.
-                                                """)
-                                                
-                                                # Show a sample of extracted text
-                                                with st.expander("📄 View extracted text (first 1000 characters)"):
-                                                    st.text(combined_text[:1000])
-                                        
-                                        except Exception as pdf_error:
-                                            st.error(f"Error processing PDF: {str(pdf_error)}")
-                                            st.info("💡 **Manual entry recommended**: Switch to 'Add Manual Deals' tab")
-                            
-                            return
-                        else:
-                            raise
-                    
-                    # Parse with BeautifulSoup
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    
-                    # Extract text content
-                    text = soup.get_text()
-                    
-                    # Store extracted deals in session state
-                    if 'scraped_deals' not in st.session_state:
-                        st.session_state.scraped_deals = []
-                    
-                    # Simple pattern matching for common deal structures
-                    # Look for patterns like "Company acquired by Acquirer for $XXX"
-                    patterns = [
-                        r'([A-Z][A-Za-z\s&]+?)\s+(?:acquired|purchased|bought)\s+(?:by\s+)?([A-Z][A-Za-z\s&]+?)(?:\s+for\s+\$?([\d.]+)\s*(billion|million|B|M))?',
-                        r'([A-Z][A-Za-z\s&]+?)\s+(?:raises|raised|secures|secured)\s+\$?([\d.]+)\s*(billion|million|B|M)',
-                        r'([A-Z][A-Za-z\s&]+?)\s+(?:acquires|purchases)\s+([A-Z][A-Za-z\s&]+?)(?:\s+for\s+\$?([\d.]+)\s*(billion|million|B|M))?',
+    extract_button = st.button("🔍 Extract Deals from Text", type="primary", key="extract_text_btn")
+    
+    if extract_button and article_text:
+        with st.spinner("Analyzing text and extracting deal information..."):
+            try:
+                import re
+                from datetime import datetime
+                import calendar
+                
+                # Currency conversion rates to USD (approximate, as of late 2025)
+                currency_rates = {
+                    '£': 1.27,    # GBP
+                    '€': 1.09,    # EUR
+                    'A$': 0.65,   # AUD
+                    'AU$': 0.65,  # AUD
+                    'CA$': 0.72,  # CAD
+                    'C$': 0.72,   # CAD
+                    '¥': 0.0067,  # JPY
+                    'CHF': 1.14,  # Swiss Franc
+                    'CNY': 0.14,  # Chinese Yuan
+                    'INR': 0.012, # Indian Rupee
+                }
+                
+                def convert_to_usd(amount, currency_symbol):
+                    """Convert foreign currency to USD"""
+                    if currency_symbol in currency_rates:
+                        converted = amount * currency_rates[currency_symbol]
+                        return converted, f" (converted from {currency_symbol})"
+                    return amount, ""
+                
+                def extract_date_info(text):
+                    """Extract date and determine month/quarter"""
+                    # Common date patterns
+                    date_patterns = [
+                        r'(?:Date of Announcement:|Date:|Announced:)\s*([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})',
+                        r'(\d{1,2})/(\d{1,2})/(\d{4})',
+                        r'(\d{4})-(\d{2})-(\d{2})',
+                        r'([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})',
                     ]
                     
-                    extracted_deals = []
+                    for pattern in date_patterns:
+                        match = re.search(pattern, text)
+                        if match:
+                            groups = match.groups()
+                            try:
+                                if len(groups) == 3:
+                                    if groups[0].isdigit():  # Format: MM/DD/YYYY or YYYY-MM-DD
+                                        if int(groups[0]) > 12:  # YYYY-MM-DD
+                                            year, month_num, day = int(groups[0]), int(groups[1]), int(groups[2])
+                                        else:  # MM/DD/YYYY
+                                            month_num, day, year = int(groups[0]), int(groups[1]), int(groups[2])
+                                    else:  # Format: Month DD, YYYY
+                                        month_name = groups[0]
+                                        month_num = list(calendar.month_name).index(month_name)
+                                        day = int(groups[1])
+                                        year = int(groups[2])
+                                    
+                                    # Determine quarter
+                                    quarter = f"Q{(month_num - 1) // 3 + 1}"
+                                    month_name = calendar.month_name[month_num]
+                                    
+                                    return month_name, quarter
+                            except (ValueError, IndexError):
+                                continue
                     
-                    # Find all paragraphs
-                    paragraphs = soup.find_all(['p', 'li'])
-                    
-                    for para in paragraphs:
-                        para_text = para.get_text()
-                        
-                        # Check for acquisition patterns
-                        for pattern in patterns:
-                            matches = re.finditer(pattern, para_text, re.IGNORECASE)
-                            for match in matches:
-                                groups = match.groups()
-                                
-                                # Determine deal type and extract info
-                                if 'acquir' in para_text.lower() or 'purchas' in para_text.lower() or 'bought' in para_text.lower():
-                                    deal_type = 'M&A'
-                                    if len(groups) >= 2:
-                                        company = groups[0].strip()
-                                        acquirer = groups[1].strip() if len(groups) > 1 else ''
-                                        value = groups[2] if len(groups) > 2 and groups[2] else 'Undisclosed'
-                                        unit = groups[3] if len(groups) > 3 and groups[3] else ''
-                                        
-                                        extracted_deals.append({
-                                            'type': deal_type,
-                                            'company': company,
-                                            'acquirer': acquirer,
-                                            'value': f"{value}{unit}" if value != 'Undisclosed' else 'Undisclosed',
-                                            'description': para_text[:200]
-                                        })
-                                
-                                elif 'rais' in para_text.lower() or 'secur' in para_text.lower():
-                                    deal_type = 'Venture'
-                                    if len(groups) >= 2:
-                                        company = groups[0].strip()
-                                        value = groups[1] if len(groups) > 1 and groups[1] else 'Undisclosed'
-                                        unit = groups[2] if len(groups) > 2 and groups[2] else ''
-                                        
-                                        extracted_deals.append({
-                                            'type': deal_type,
-                                            'company': company,
-                                            'acquirer': '',
-                                            'value': f"{value}{unit}" if value != 'Undisclosed' else 'Undisclosed',
-                                            'description': para_text[:200]
-                                        })
-                    
-                    if extracted_deals:
-                        st.session_state.scraped_deals = extracted_deals
-                        st.success(f"✅ Found {len(extracted_deals)} potential deals! Review and edit below.")
-                    else:
-                        st.warning("⚠️ No deals found automatically. Try the manual entry form instead.")
-                        st.info("💡 The scraper looks for patterns like 'Company acquired by Acquirer' or 'Company raises $XXM'")
+                    return None, None
                 
-                except Exception as e:
-                    error_msg = str(e)
-                    st.error(f"❌ Error scraping URL: {error_msg}")
+                def parse_value(value_text):
+                    """Parse deal value with currency conversion"""
+                    if not value_text or 'not disclosed' in value_text.lower() or 'undisclosed' in value_text.lower():
+                        return 'Undisclosed', ''
                     
-                    if "403" in error_msg or "Forbidden" in error_msg:
-                        st.warning("""
-                        **This website blocks automated scraping.**
-                        
-                        **What to do:**
-                        1. Open the article in your browser
-                        2. Copy the deal information (company names, acquirers, values)
-                        3. Switch to the "Add Manual Deals" tab
-                        4. Enter each deal manually (much faster than you think!)
-                        """)
-                    elif "timeout" in error_msg.lower():
-                        st.warning("⏱️ The website took too long to respond. Try again or use manual entry.")
-                    elif "404" in error_msg:
-                        st.warning("🔍 Page not found. Please check the URL and try again.")
-                    else:
-                        st.info("💡 **Tip**: When scraping fails, the manual entry form is your best option. Just copy the deal info from the article and paste it in!")
-        else:
-            st.warning("Please enter a URL")
-    
-    # Display and edit scraped deals
-    if 'scraped_deals' in st.session_state and st.session_state.scraped_deals:
-        st.markdown("---")
-        st.subheader("Review Extracted Deals")
-        st.markdown(f"**{len(st.session_state.scraped_deals)} deals found** - Edit or remove deals before adding to dashboard:")
-        
-        deals_to_add = []
-        
-        for idx, deal in enumerate(st.session_state.scraped_deals):
-            with st.expander(f"Deal {idx + 1}: {deal['company']}", expanded=True):
-                # Add delete button at the top right
-                col_delete, col_spacer = st.columns([1, 5])
-                with col_delete:
-                    if st.button(f"🗑️ Remove", key=f"delete_{idx}", type="secondary", use_container_width=True):
-                        # Remove this deal from the list
-                        st.session_state.scraped_deals.pop(idx)
-                        st.success(f"Removed deal: {deal['company']}")
-                        st.rerun()
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    deal_type_select = st.selectbox(
-                        "Deal Type*", 
-                        ["M&A Activity", "Venture Investment"],
-                        index=0 if deal['type'] == 'M&A' else 1,
-                        key=f"type_{idx}"
-                    )
+                    # Look for currency symbols and amounts
+                    currency_patterns = [
+                        (r'([£€¥]|A\$|AU\$|CA\$|C\$|CHF|CNY|INR)\s*([\d,]+(?:\.\d+)?)\s*(billion|million|B|M|bn)?', True),
+                        (r'\$\s*([\d,]+(?:\.\d+)?)\s*(billion|million|B|M|bn)?', False),
+                        (r'([\d,]+(?:\.\d+)?)\s*(billion|million|B|M|bn)', False),
+                    ]
                     
-                    company = st.text_input("Company*", value=deal['company'], key=f"company_{idx}")
-                    
-                    if deal_type_select == "M&A Activity":
-                        acquirer = st.text_input("Acquirer*", value=deal.get('acquirer', ''), key=f"acquirer_{idx}")
-                        deal_subtype = st.selectbox("Deal Subtype*", ["Acquisition", "Merger"], key=f"subtype_{idx}")
-                    else:
-                        funding_type = st.selectbox("Funding Type*", ["VC", "PE"], key=f"funding_{idx}")
-                        lead_investors = st.text_input("Lead Investors", key=f"investors_{idx}")
-                
-                with col2:
-                    technology = st.text_area("Technology/Description*", value=deal.get('description', ''), height=100, key=f"tech_{idx}")
-                    deal_value = st.text_input("Deal Value (e.g., 100M, 1.5B, or Undisclosed)", value=deal.get('value', 'Undisclosed'), key=f"value_{idx}")
-                    
-                col3, col4 = st.columns(2)
-                with col3:
-                    quarter = st.selectbox("Quarter*", ["Q1", "Q2", "Q3", "Q4"], key=f"quarter_{idx}")
-                with col4:
-                    month = st.selectbox("Month*", [
-                        "January", "February", "March", "April", "May", "June",
-                        "July", "August", "September", "October", "November", "December"
-                    ], key=f"month_{idx}")
-                
-                # Store edited deal info
-                if deal_type_select == "M&A Activity":
-                    deals_to_add.append({
-                        'type': 'M&A',
-                        'company': company,
-                        'acquirer': acquirer,
-                        'deal_subtype': deal_subtype,
-                        'technology': technology,
-                        'value': deal_value,
-                        'quarter': quarter,
-                        'month': month
-                    })
-                else:
-                    deals_to_add.append({
-                        'type': 'Venture',
-                        'company': company,
-                        'funding_type': funding_type,
-                        'lead_investors': lead_investors,
-                        'technology': technology,
-                        'value': deal_value,
-                        'quarter': quarter,
-                        'month': month
-                    })
-        
-        # Add action buttons
-        st.markdown("---")
-        col1, col2, col3 = st.columns([2, 2, 2])
-        
-        with col1:
-            add_all_clicked = st.button("✅ Add All Deals to Dashboard", type="primary", use_container_width=True)
-        
-        with col2:
-            if st.button("🗑️ Clear All Deals", type="secondary", use_container_width=True):
-                st.session_state.scraped_deals = []
-                st.success("All deals cleared!")
-                st.rerun()
-        
-        with col3:
-            st.metric("Deals to Add", len(deals_to_add))
-        
-        # Only proceed with adding if the Add All button was clicked
-        if add_all_clicked:
-            ma_updated = ma_df.copy()
-            inv_updated = inv_df.copy()
-            
-            added_ma = 0
-            added_inv = 0
-            skipped_duplicates = []
-            
-            for deal in deals_to_add:
-                if deal['type'] == 'M&A':
-                    # Parse and format deal value
-                    def parse_deal_input(val):
-                        if not val or val.lower() == 'undisclosed':
-                            return 'Undisclosed'
-                        val_str = val.upper().replace('$', '').replace(',', '').strip()
-                        try:
-                            if 'B' in val_str:
-                                num = float(val_str.replace('B', '').replace('ILLION', ''))
-                                return f"${num * 1000000000:,.0f}"
-                            elif 'M' in val_str:
-                                num = float(val_str.replace('M', '').replace('ILLION', ''))
-                                return f"${num * 1000000:,.0f}"
-                            else:
-                                return f"${float(val_str):,.0f}"
-                        except:
-                            return 'Undisclosed'
-                    
-                    formatted_value = parse_deal_input(deal['value'])
-                    
-                    # Check for duplicates - compare company name and deal value
-                    is_duplicate = False
-                    for idx, existing_row in ma_updated.iterrows():
-                        existing_company = str(existing_row['Company']).strip().lower()
-                        existing_value = str(existing_row['Deal Value']).strip()
-                        
-                        new_company = deal['company'].strip().lower()
-                        
-                        # Compare company names (exact match or very similar)
-                        if existing_company == new_company or existing_company in new_company or new_company in existing_company:
-                            # Compare deal values
-                            if existing_value == formatted_value:
-                                is_duplicate = True
-                                skipped_duplicates.append(f"M&A: {deal['company']} ({formatted_value})")
-                                break
-                    
-                    if not is_duplicate:
-                        new_deal = pd.DataFrame({
-                            'Company': [deal['company']],
-                            'Acquirer': [deal['acquirer']],
-                            'Deal Type (Merger / Acquisition)': [deal['deal_subtype']],
-                            'Technology/Description': [deal['technology']],
-                            'Deal Value': [formatted_value],
-                            'Quarter': [deal['quarter']],
-                            'Month': [deal['month']]
-                        })
-                        ma_updated = pd.concat([ma_updated, new_deal], ignore_index=True)
-                        added_ma += 1
-                
-                else:  # Venture
-                    # Parse and format amount
-                    def parse_amount_input(val):
-                        if not val or val.lower() == 'undisclosed':
-                            return 'Undisclosed'
-                        val_str = val.upper().replace('$', '').replace(',', '').strip()
-                        try:
-                            if 'B' in val_str:
-                                num = float(val_str.replace('B', '').replace('ILLION', ''))
-                                return int(num * 1000000000)
-                            elif 'M' in val_str:
-                                num = float(val_str.replace('M', '').replace('ILLION', ''))
-                                return int(num * 1000000)
-                            else:
-                                return int(float(val_str))
-                        except:
-                            return 'Undisclosed'
-                    
-                    formatted_amount = parse_amount_input(deal['value'])
-                    
-                    # Check for duplicates - compare company name and amount
-                    is_duplicate = False
-                    for idx, existing_row in inv_updated.iterrows():
-                        existing_company = str(existing_row['Company']).strip().lower()
-                        existing_amount = str(existing_row['Amount Raised']).strip()
-                        
-                        new_company = deal['company'].strip().lower()
-                        
-                        # Compare company names (exact match or very similar)
-                        if existing_company == new_company or existing_company in new_company or new_company in existing_company:
-                            # Compare amounts
-                            if str(formatted_amount) == existing_amount:
-                                is_duplicate = True
-                                # Format for display
-                                if formatted_amount != 'Undisclosed':
-                                    display_val = f"${formatted_amount:,}"
+                    for pattern, has_currency in currency_patterns:
+                        match = re.search(pattern, value_text, re.IGNORECASE)
+                        if match:
+                            groups = match.groups()
+                            try:
+                                if has_currency:
+                                    currency = groups[0]
+                                    amount_str = groups[1].replace(',', '')
+                                    unit = groups[2] if len(groups) > 2 and groups[2] else ''
                                 else:
-                                    display_val = 'Undisclosed'
-                                skipped_duplicates.append(f"Venture: {deal['company']} ({display_val})")
-                                break
+                                    currency = '$'
+                                    amount_str = groups[0].replace(',', '')
+                                    unit = groups[1] if len(groups) > 1 and groups[1] else ''
+                                
+                                amount = float(amount_str)
+                                
+                                # Convert to millions
+                                if unit and unit.upper() in ['B', 'BILLION', 'BN']:
+                                    amount = amount * 1000
+                                elif not unit or unit.upper() in ['M', 'MILLION']:
+                                    pass  # Already in millions
+                                
+                                # Convert currency if needed
+                                if currency != '$':
+                                    amount, conversion_note = convert_to_usd(amount, currency)
+                                else:
+                                    conversion_note = ''
+                                
+                                return f"{amount}M", conversion_note
+                            except (ValueError, IndexError):
+                                continue
                     
-                    if not is_duplicate:
-                        new_deal = pd.DataFrame({
-                            'Company': [deal['company']],
-                            'Funding type (VC / PE)': [deal['funding_type']],
-                            'Technology/Description': [deal['technology']],
-                            'Amount Raised': [formatted_amount],
-                            'Lead Investors': [deal.get('lead_investors', 'Undisclosed')],
-                            'Quarter': [deal['quarter']],
-                            'Month': [deal['month']]
-                        })
-                        inv_updated = pd.concat([inv_updated, new_deal], ignore_index=True)
-                        added_inv += 1
-            
-            # Save data
-            if save_data(ma_updated, inv_updated):
-                success_msg = f"✅ Successfully added {added_ma} M&A deals and {added_inv} Venture deals!"
-                if skipped_duplicates:
-                    success_msg += f"\n\n⚠️ Skipped {len(skipped_duplicates)} duplicate(s):"
-                    for dup in skipped_duplicates:
-                        success_msg += f"\n• {dup}"
+                    return 'Undisclosed', ''
                 
-                st.success(success_msg)
-                if added_ma > 0 or added_inv > 0:
-                    st.balloons()
-                # Clear session state
-                st.session_state.scraped_deals = []
-                # Clear cache to reload data
-                st.cache_data.clear()
-                st.rerun()
-
+                # Split text into deal blocks (separated by blank lines or specific patterns)
+                deal_blocks = re.split(r'\n\s*\n+', article_text)
+                
+                extracted_deals = []
+                
+                for block in deal_blocks:
+                    if len(block.strip()) < 20:  # Skip very short blocks
+                        continue
+                    
+                    # Extract company names (look for "—" or "acquires" or "raises" patterns)
+                    deal_info = {}
+                    
+                    # Pattern 1: "Acquirer—Company" format
+                    hyphen_match = re.search(r'([A-Z][A-Za-z\s&,\.]+?)\s*[—–-]\s*([A-Z][A-Za-z\s&,\.]+?)(?:\n|$)', block)
+                    if hyphen_match:
+                        deal_info['acquirer'] = hyphen_match.group(1).strip()
+                        deal_info['company'] = hyphen_match.group(2).strip()
+                        deal_info['type'] = 'M&A'
+                    
+                    # Pattern 2: "Company will be acquired by Acquirer"
+                    acquired_match = re.search(r'([A-Z][A-Za-z\s&,\.]+?)\s+(?:will be|was|has been)\s+acquired by\s+(?:funds managed by\s+)?([A-Z][A-Za-z\s&,\.]+?)(?:,|\.|$)', block, re.IGNORECASE)
+                    if acquired_match and 'type' not in deal_info:
+                        deal_info['company'] = acquired_match.group(1).strip()
+                        deal_info['acquirer'] = acquired_match.group(2).strip()
+                        deal_info['type'] = 'M&A'
+                    
+                    # Pattern 3: "Acquirer acquires/purchases Company"
+                    acquires_match = re.search(r'([A-Z][A-Za-z\s&,\.]+?)\s+(?:acquires|purchases|buys)\s+([A-Z][A-Za-z\s&,\.]+?)(?:\s+for|\n|$)', block, re.IGNORECASE)
+                    if acquires_match and 'type' not in deal_info:
+                        deal_info['acquirer'] = acquires_match.group(1).strip()
+                        deal_info['company'] = acquires_match.group(2).strip()
+                        deal_info['type'] = 'M&A'
+                    
+                    # Pattern 4: "Company raises/secures $X" (Venture)
+                    raises_match = re.search(r'([A-Z][A-Za-z\s&,\.]+?)\s+(?:raises|raised|secures|secured)\s+[\$£€]', block, re.IGNORECASE)
+                    if raises_match and 'type' not in deal_info:
+                        deal_info['company'] = raises_match.group(1).strip()
+                        deal_info['acquirer'] = ''
+                        deal_info['type'] = 'Venture'
+                    
+                    # Extract value
+                    value_match = re.search(r'Value:\s*(.+?)(?:\n|More info|$)', block, re.IGNORECASE)
+                    if value_match:
+                        parsed_value, conversion_note = parse_value(value_match.group(1))
+                        deal_info['value'] = parsed_value
+                        deal_info['conversion_note'] = conversion_note
+                    
+                    # Extract date and determine month/quarter
+                    month, quarter = extract_date_info(block)
+                    if month and quarter:
+                        deal_info['month'] = month
+                        deal_info['quarter'] = quarter
+                    
+                    # Extract description (first sentence or up to 200 chars)
+                    lines = block.split('\n')
+                    description = ''
+                    for line in lines[1:]:  # Skip first line (usually company names)
+                        if line.strip() and not line.strip().startswith(('Date', 'Value', 'More info')):
+                            description = line.strip()
+                            break
+                    deal_info['description'] = description[:200] if description else block[:200]
+                    
+                    # Only add if we found at least a company name
+                    if 'company' in deal_info:
+                        extracted_deals.append(deal_info)
+                
+                if extracted_deals:
+                    st.session_state.scraped_deals = extracted_deals
+                    st.success(f"✅ Extracted {len(extracted_deals)} deals! Review and edit below.")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ No deals found in the text. Please check the format or try manual entry.")
+                    st.info("""
+                    **Tips for better extraction:**
+                    - Include company names, acquirer/investor names
+                    - Include dates (e.g., "Date of Announcement: October 21, 2025")
+                    - Include values (e.g., "Value: $18.3 billion")
+                    - Separate deals with blank lines
+                    """)
+            
+            except Exception as e:
+                st.error(f"Error parsing text: {str(e)}")
+                st.info("💡 **Try manual entry**: Switch to 'Add Manual Deals' tab")
+    
+    # Display and edit extracted deals
+    if 'scraped_deals' in st.session_state and st.session_state.scraped_deals:
+        process_extracted_deals(st.session_state.scraped_deals, ma_df, inv_df)
 def show_jp_morgan_upload():
     """JP Morgan report upload and data extraction"""
     st.subheader("Upload JP Morgan MedTech Industry Report")
