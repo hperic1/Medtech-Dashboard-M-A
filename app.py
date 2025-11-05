@@ -419,13 +419,16 @@ def show_deal_activity(ma_df, inv_df):
     search_ma = st.text_input("🔍 Search M&A Deals", placeholder="Search by company, acquirer, technology...", key='search_ma')
     
     # Filters
-    filter_col1, filter_col2 = st.columns(2)
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
     with filter_col1:
         quarters_ma = ['All'] + sorted(ma_df['Quarter'].unique().tolist())
         selected_quarter_ma = st.selectbox("Filter by Quarter", quarters_ma, key='ma_quarter')
     with filter_col2:
         months_ma = ['All'] + sorted(ma_df['Month'].unique().tolist())
         selected_month_ma = st.selectbox("Filter by Month", months_ma, key='ma_month')
+    with filter_col3:
+        conferences_ma = ['All'] + sorted([c for c in ma_df['Conference'].unique() if pd.notna(c)])
+        selected_conference_ma = st.selectbox("Filter by Conference", conferences_ma, key='ma_conference')
     
     # Apply filters
     filtered_ma = ma_df.copy()
@@ -433,6 +436,8 @@ def show_deal_activity(ma_df, inv_df):
         filtered_ma = filtered_ma[filtered_ma['Quarter'] == selected_quarter_ma]
     if selected_month_ma != 'All':
         filtered_ma = filtered_ma[filtered_ma['Month'] == selected_month_ma]
+    if selected_conference_ma != 'All':
+        filtered_ma = filtered_ma[filtered_ma['Conference'] == selected_conference_ma]
     
     # Apply search filter
     if search_ma:
@@ -523,13 +528,16 @@ def show_deal_activity(ma_df, inv_df):
     search_inv = st.text_input("🔍 Search Investment Deals", placeholder="Search by company, investors, technology...", key='search_inv')
     
     # Filters
-    filter_col1, filter_col2 = st.columns(2)
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
     with filter_col1:
         quarters_inv = ['All'] + sorted(inv_df['Quarter'].unique().tolist())
         selected_quarter_inv = st.selectbox("Filter by Quarter", quarters_inv, key='inv_quarter')
     with filter_col2:
         months_inv = ['All'] + sorted(inv_df['Month'].unique().tolist())
         selected_month_inv = st.selectbox("Filter by Month", months_inv, key='inv_month')
+    with filter_col3:
+        conferences_inv = ['All'] + sorted([c for c in inv_df['Conference'].unique() if pd.notna(c)])
+        selected_conference_inv = st.selectbox("Filter by Conference", conferences_inv, key='inv_conference')
     
     # Apply filters
     filtered_inv = inv_df.copy()
@@ -537,6 +545,8 @@ def show_deal_activity(ma_df, inv_df):
         filtered_inv = filtered_inv[filtered_inv['Quarter'] == selected_quarter_inv]
     if selected_month_inv != 'All':
         filtered_inv = filtered_inv[filtered_inv['Month'] == selected_month_inv]
+    if selected_conference_inv != 'All':
+        filtered_inv = filtered_inv[filtered_inv['Conference'] == selected_conference_inv]
     
     # Apply search filter
     if search_inv:
@@ -1077,7 +1087,7 @@ def show_manual_deal_entry(ma_df, inv_df, ipo_df):
                 technology = st.text_area("Technology/Description*")
                 deal_value = st.text_input("Deal Value (e.g., 100M, 1.5B, or Undisclosed)")
             
-            col3, col4 = st.columns(2)
+            col3, col4, col5 = st.columns(3)
             with col3:
                 quarter = st.selectbox("Quarter*", ["Q1", "Q2", "Q3", "Q4"])
             with col4:
@@ -1085,6 +1095,8 @@ def show_manual_deal_entry(ma_df, inv_df, ipo_df):
                     "January", "February", "March", "April", "May", "June",
                     "July", "August", "September", "October", "November", "December"
                 ])
+            with col5:
+                conference = st.text_input("Conference (optional)", placeholder="e.g., MedTech World (Malta)")
             
             submitted = st.form_submit_button("Add M&A Deal")
             
@@ -1116,7 +1128,8 @@ def show_manual_deal_entry(ma_df, inv_df, ipo_df):
                         'Technology/Description': [technology],
                         'Deal Value': [formatted_value],
                         'Quarter': [quarter],
-                        'Month': [month]
+                        'Month': [month],
+                        'Conference': [conference if conference else None]
                     })
                     
                     # Append to dataframe
@@ -1148,7 +1161,7 @@ def show_manual_deal_entry(ma_df, inv_df, ipo_df):
             
             lead_investors = st.text_input("Lead Investors")
             
-            col3, col4 = st.columns(2)
+            col3, col4, col5 = st.columns(3)
             with col3:
                 quarter = st.selectbox("Quarter*", ["Q1", "Q2", "Q3", "Q4"])
             with col4:
@@ -1156,6 +1169,8 @@ def show_manual_deal_entry(ma_df, inv_df, ipo_df):
                     "January", "February", "March", "April", "May", "June",
                     "July", "August", "September", "October", "November", "December"
                 ])
+            with col5:
+                conference = st.text_input("Conference (optional)", placeholder="e.g., MedTech World (Malta)")
             
             submitted = st.form_submit_button("Add Investment Deal")
             
@@ -1187,7 +1202,8 @@ def show_manual_deal_entry(ma_df, inv_df, ipo_df):
                         'Amount Raised': [formatted_amount],
                         'Lead Investors': [lead_investors if lead_investors else 'Undisclosed'],
                         'Quarter': [quarter],
-                        'Month': [month]
+                        'Month': [month],
+                        'Conference': [conference if conference else None]
                     })
                     
                     # Append to dataframe
