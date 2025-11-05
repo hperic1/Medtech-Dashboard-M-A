@@ -348,18 +348,21 @@ def show_deal_activity(ma_df, inv_df):
         # Create display dataframe with sortable numeric values
         ma_display = filtered_ma.copy()
         
-        # Add hidden numeric column for sorting
+        # Add hidden numeric column for sorting - use -1 for Undisclosed so it goes to bottom
         def parse_to_numeric(val):
             if val == 'Undisclosed' or pd.isna(val):
-                return 0
+                return -1  # Changed from 0 to -1 to sort Undisclosed to bottom
             val_str = str(val).replace('$', '').replace(',', '').strip()
             try:
                 return float(val_str)
             except:
-                return 0
+                return -1
         
         # Create a numeric sort column
         ma_display['_Deal_Value_Numeric'] = ma_display['Deal Value'].apply(parse_to_numeric)
+        
+        # Sort by Deal Value descending by default (highest deals first, Undisclosed at bottom)
+        ma_display = ma_display.sort_values('_Deal_Value_Numeric', ascending=False)
         
         # Display without the numeric column (it's just for sorting)
         display_cols = [col for col in ma_display.columns if not col.startswith('_')]
@@ -369,10 +372,9 @@ def show_deal_activity(ma_df, inv_df):
             use_container_width=True, 
             height=400,
             column_config={
-                "Deal Value": st.column_config.NumberColumn(
+                "Deal Value": st.column_config.TextColumn(
                     "Deal Value",
                     help="Deal value in USD",
-                    format="$%d",
                 )
             }
         )
@@ -451,10 +453,13 @@ def show_deal_activity(ma_df, inv_df):
         # Format Amount Raised column for display with sortable numeric values
         inv_display = filtered_inv.copy()
         
-        # Add numeric sort column
+        # Add numeric sort column - use -1 for Undisclosed so it goes to bottom
         inv_display['_Amount_Numeric'] = inv_display['Amount Raised'].apply(
-            lambda x: float(x) if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else 0
+            lambda x: float(x) if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else -1
         )
+        
+        # Sort by Amount descending by default (highest amounts first, Undisclosed at bottom)
+        inv_display = inv_display.sort_values('_Amount_Numeric', ascending=False)
         
         # Format for display
         inv_display['Amount Raised'] = inv_display['Amount Raised'].apply(
@@ -469,10 +474,9 @@ def show_deal_activity(ma_df, inv_df):
             use_container_width=True, 
             height=400,
             column_config={
-                "Amount Raised": st.column_config.NumberColumn(
+                "Amount Raised": st.column_config.TextColumn(
                     "Amount Raised",
                     help="Investment amount in USD",
-                    format="$%d",
                 )
             }
         )
