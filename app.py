@@ -1441,32 +1441,42 @@ def show_web_scraper(ma_df, inv_df):
                         
                         # Extract amounts with currency symbols
                         amount_patterns = [
-                            r'([$£€A]\$?|AU\$|CA\$)([\d,]+(?:\.\d+)?)\s*(million|billion|M|B)?',
+                            r'([$£€]|A\$|AU\$|CA\$|C\$)([\d,]+(?:\.\d+)?)\s*(million|billion|M|B)?',
                             r'([\d,]+(?:\.\d+)?)\s*(million|billion|M|B)',
                         ]
                         
                         for pattern in amount_patterns:
                             match = re.search(pattern, line, re.IGNORECASE)
                             if match:
-                                groups = match.groups()
-                                if len(groups) == 3:
-                                    currency = groups[0] if groups[0] else '$'
-                                    amount = float(groups[1].replace(',', ''))
-                                    unit = groups[2] if groups[2] else ''
-                                else:
-                                    currency = '$'
-                                    amount = float(groups[0].replace(',', ''))
-                                    unit = groups[1] if groups[1] else ''
-                                
-                                # Convert to USD if needed
-                                if currency != '$':
-                                    amount = convert_to_usd(amount, currency)
-                                
-                                # Convert to actual dollar amount
-                                if unit and unit.upper() in ['B', 'BILLION']:
-                                    amount = amount * 1000
-                                
-                                current_deal['amount'] = f"{amount}M"
+                                try:
+                                    groups = match.groups()
+                                    if len(groups) == 3:
+                                        currency = groups[0] if groups[0] else '$'
+                                        amount_str = groups[1].replace(',', '')
+                                        if not amount_str or amount_str == '':
+                                            continue
+                                        amount = float(amount_str)
+                                        unit = groups[2] if groups[2] else ''
+                                    else:
+                                        currency = '$'
+                                        amount_str = groups[0].replace(',', '')
+                                        if not amount_str or amount_str == '':
+                                            continue
+                                        amount = float(amount_str)
+                                        unit = groups[1] if groups[1] else ''
+                                    
+                                    # Convert to USD if needed
+                                    if currency != '$':
+                                        amount = convert_to_usd(amount, currency)
+                                    
+                                    # Convert to actual dollar amount
+                                    if unit and unit.upper() in ['B', 'BILLION']:
+                                        amount = amount * 1000
+                                    
+                                    current_deal['amount'] = f"{amount}M"
+                                except (ValueError, AttributeError):
+                                    # Skip if conversion fails
+                                    continue
                                 break
                         
                         # Look for technology description
