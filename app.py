@@ -127,6 +127,32 @@ def format_currency(value):
     except:
         return str(value)
 
+def format_dataframe_currency(df, currency_columns):
+    """Format currency columns in dataframe with commas"""
+    df_display = df.copy()
+    for col in currency_columns:
+        if col in df_display.columns:
+            def format_cell(x):
+                if x == 'Undisclosed' or pd.isna(x) or str(x).strip() == '':
+                    return 'Undisclosed'
+                try:
+                    val_str = str(x).replace('$', '').replace(',', '').strip().upper()
+                    if 'B' in val_str:
+                        # Convert billions to dollars
+                        val = float(val_str.replace('B', '')) * 1000000000
+                    elif 'M' in val_str:
+                        # Convert millions to dollars
+                        val = float(val_str.replace('M', '')) * 1000000
+                    else:
+                        # Assume it's already a number in millions
+                        val = float(val_str) * 1000000
+                    return f"${val:,.0f}"
+                except:
+                    return str(x)
+            
+            df_display[col] = df_display[col].apply(format_cell)
+    return df_display
+
 def create_quarterly_chart(df, value_col, title):
     """Create quarterly stacked bar chart with deal count overlay"""
     try:
@@ -248,8 +274,8 @@ def create_jp_morgan_chart_by_category(category, color):
             y=counts,
             name='Deal Count',
             mode='lines+markers+text',
-            line=dict(color='#2ca02c', width=3),
-            marker=dict(size=10),
+            line=dict(color='#d62728', width=3),  # Dark red for better visibility against blue and orange
+            marker=dict(size=10, color='#d62728'),
             text=[str(c) if c > 0 else '' for c in counts],
             textposition='top center',
             yaxis='y2',
@@ -344,7 +370,9 @@ def show_deal_activity(ma_df, inv_df):
     tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
     
     with tab1:
-        st.dataframe(filtered_ma, use_container_width=True, height=400)
+        # Format currency columns for display
+        ma_display = format_dataframe_currency(filtered_ma, ['Deal Value'])
+        st.dataframe(ma_display, use_container_width=True, height=400)
     
     with tab2:
         # Top 3 deals
@@ -372,12 +400,11 @@ def show_deal_activity(ma_df, inv_df):
         top_deals = top_deals.nlargest(3, 'Deal_Value_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Format exactly like chart labels: $9.2B or $467M
+            # Get the numeric value and format with commas (full number, no abbreviation)
             value = row['Deal_Value_Numeric']
-            if value >= 1000:
-                formatted_value = f"${value/1000:.1f}B"
-            elif value > 0:
-                formatted_value = f"${value:.0f}M"
+            if value > 0:
+                # Convert millions to actual dollar amount and format with commas
+                formatted_value = f"${value * 1000000:,.0f}"
             else:
                 formatted_value = "Undisclosed"
             
@@ -385,7 +412,7 @@ def show_deal_activity(ma_df, inv_df):
             deal_type = row['Deal Type (Merger / Acquisition)']
             verb = "merged with" if deal_type == "Merger" else "acquired"
             
-            # Display with chart-style formatting
+            # Display with full number format
             st.markdown(f"**{row['Acquirer']} {verb} {row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
@@ -430,7 +457,9 @@ def show_deal_activity(ma_df, inv_df):
     tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
     
     with tab1:
-        st.dataframe(filtered_inv, use_container_width=True, height=400)
+        # Format currency columns for display
+        inv_display = format_dataframe_currency(filtered_inv, ['Amount Raised'])
+        st.dataframe(inv_display, use_container_width=True, height=400)
     
     with tab2:
         # Top 3 deals
@@ -458,16 +487,15 @@ def show_deal_activity(ma_df, inv_df):
         top_deals = top_deals.nlargest(3, 'Amount_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Format exactly like chart labels: $3.7B or $467M
+            # Get the numeric value and format with commas (full number, no abbreviation)
             value = row['Amount_Numeric']
-            if value >= 1000:
-                formatted_value = f"${value/1000:.1f}B"
-            elif value > 0:
-                formatted_value = f"${value:.0f}M"
+            if value > 0:
+                # Convert millions to actual dollar amount and format with commas
+                formatted_value = f"${value * 1000000:,.0f}"
             else:
                 formatted_value = "Undisclosed"
             
-            # Display with chart-style formatting - company name only
+            # Display with full number format - company name only
             st.markdown(f"**{row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
@@ -505,21 +533,27 @@ def show_jp_morgan_summary():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### M&A Activity")
-        st.info("""
-        - **Q1 2025**: $9.2B across 57 deals - Strong start with strategic acquisitions including Stryker's $4.9B acquisition of Inari Medical
-        - **Q2 2025**: $2.1B across 43 deals - Activity slowed as market stability concerns affected deal appetite
-        - **Q3 2025**: $21.7B across 65 deals - Significant surge in deal value and volume, surpassing full-year 2024 figures
-        - **Key Focus**: Strategic consolidation in cardiovascular and minimally invasive technologies continues to drive large-scale transactions
+        st.markdown("**M&A Activity**")
+        st.markdown("""
+        • **Q1 2025**: $9.2B across 57 deals - Strong start with strategic acquisitions including Stryker's $4.9B acquisition of Inari Medical
+        
+        • **Q2 2025**: $2.1B across 43 deals - Activity slowed as market stability concerns affected deal appetite
+        
+        • **Q3 2025**: $21.7B across 65 deals - Significant surge in deal value and volume, surpassing full-year 2024 figures
+        
+        • **Key Focus**: Strategic consolidation in cardiovascular and minimally invasive technologies continues to drive large-scale transactions
         """)
         
     with col2:
-        st.markdown("#### Venture Capital")
-        st.info("""
-        - **Q1 2025**: $3.7B across 117 rounds - Strong quarter with larger investments into fewer companies, including 13 rounds over $100M
-        - **Q2 2025**: $2.3B - Decreased from Q1 despite strong start to the year
-        - **Q3 2025**: $2.9B across 67 rounds - Slight decline from Q3 2024, with year-to-date total at $9.5B across 259 rounds
-        - **Key Trend**: Late-stage rounds (Series B+) dominate at $7.9B YTD, while early-stage (Seed/Series A) continues to lag
+        st.markdown("**Venture Capital**")
+        st.markdown("""
+        • **Q1 2025**: $3.7B across 117 rounds - Strong quarter with larger investments into fewer companies, including 13 rounds over $100M
+        
+        • **Q2 2025**: $2.3B - Decreased from Q1 despite strong start to the year
+        
+        • **Q3 2025**: $2.9B across 67 rounds - Slight decline from Q3 2024, with year-to-date total at $9.5B across 259 rounds
+        
+        • **Key Trend**: Late-stage rounds (Series B+) dominate at $7.9B YTD, while early-stage (Seed/Series A) continues to lag
         """)
 
 def show_data_management(ma_df, inv_df):
