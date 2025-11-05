@@ -127,31 +127,6 @@ def format_currency(value):
     except:
         return str(value)
 
-def format_dataframe_currency(df, currency_columns):
-    """Format currency columns in dataframe with commas"""
-    df_display = df.copy()
-    for col in currency_columns:
-        if col in df_display.columns:
-            def format_cell(x):
-                if x == 'Undisclosed' or pd.isna(x) or str(x).strip() == '':
-                    return 'Undisclosed'
-                try:
-                    val_str = str(x).replace('$', '').replace(',', '').strip().upper()
-                    if 'B' in val_str:
-                        # Convert billions to dollars
-                        val = float(val_str.replace('B', '')) * 1000000000
-                    elif 'M' in val_str:
-                        # Convert millions to dollars
-                        val = float(val_str.replace('M', '')) * 1000000
-                    else:
-                        # Assume it's already a number in millions
-                        val = float(val_str) * 1000000
-                    return f"${val:,.0f}"
-                except:
-                    return str(x)
-            
-            df_display[col] = df_display[col].apply(format_cell)
-    return df_display
 
 def create_quarterly_chart(df, value_col, title):
     """Create quarterly stacked bar chart with deal count overlay"""
@@ -245,8 +220,8 @@ def create_jp_morgan_chart_by_category(category, color):
                 'counts': [57, 43, 65]
             },
             'Venture': {
-                'values': [3700, 2300, 2900],  # Q1: $3.7B (117 rounds), Q2: $2.3B, Q3: $2.9B (67 rounds)
-                'counts': [117, 0, 67]  # Q2 count not specified in reports
+                'values': [3700, 2600, 2900],  # Q1: $3.7B (117 rounds), Q2: $2.6B (90 rounds), Q3: $2.9B (67 rounds)
+                'counts': [117, 90, 67]  # Q2: 90 venture rounds totaling $2.6 billion
             }
         }
         
@@ -274,8 +249,8 @@ def create_jp_morgan_chart_by_category(category, color):
             y=counts,
             name='Deal Count',
             mode='lines+markers+text',
-            line=dict(color='#d62728', width=3),  # Dark red for better visibility against blue and orange
-            marker=dict(size=10, color='#d62728'),
+            line=dict(color='#90EE90', width=3),  # Light green for better visibility against blue and orange
+            marker=dict(size=10, color='#90EE90'),
             text=[str(c) if c > 0 else '' for c in counts],
             textposition='top center',
             yaxis='y2',
@@ -370,29 +345,20 @@ def show_deal_activity(ma_df, inv_df):
     tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
     
     with tab1:
-        # Format currency columns for display
-        ma_display = format_dataframe_currency(filtered_ma, ['Deal Value'])
-        st.dataframe(ma_display, use_container_width=True, height=400)
+        st.dataframe(filtered_ma, use_container_width=True, height=400)
     
     with tab2:
         # Top 3 deals
         top_deals = filtered_ma.copy()
         
-        # Improved parsing function to handle B and M suffixes
+        # Parse function - values in Excel are already actual dollars like "$350,000,000"
         def parse_deal_value(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+            val_str = str(val).replace('$', '').replace(',', '').strip()
             try:
-                if 'B' in val_str:
-                    # Value is in billions, convert to millions
-                    return float(val_str.replace('B', '')) * 1000
-                elif 'M' in val_str:
-                    # Value is already in millions
-                    return float(val_str.replace('M', ''))
-                else:
-                    # Plain number, assume millions
-                    return float(val_str)
+                # Value is already in actual dollars, not millions
+                return float(val_str)
             except:
                 return 0
         
@@ -400,19 +366,14 @@ def show_deal_activity(ma_df, inv_df):
         top_deals = top_deals.nlargest(3, 'Deal_Value_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Get the numeric value and format with commas (full number, no abbreviation)
-            value = row['Deal_Value_Numeric']
-            if value > 0:
-                # Convert millions to actual dollar amount and format with commas
-                formatted_value = f"${value * 1000000:,.0f}"
-            else:
-                formatted_value = "Undisclosed"
+            # Value is already in actual dollars, just format with commas
+            formatted_value = str(row['Deal Value']) if row['Deal Value'] != 'Undisclosed' else 'Undisclosed'
             
             # Get deal type verb
             deal_type = row['Deal Type (Merger / Acquisition)']
             verb = "merged with" if deal_type == "Merger" else "acquired"
             
-            # Display with full number format
+            # Display with value directly from Excel (already formatted)
             st.markdown(f"**{row['Acquirer']} {verb} {row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #1f77b4;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
@@ -457,29 +418,20 @@ def show_deal_activity(ma_df, inv_df):
     tab1, tab2, tab3 = st.tabs(["📊 Table", "🏆 Top Deals", "📈 Charts"])
     
     with tab1:
-        # Format currency columns for display
-        inv_display = format_dataframe_currency(filtered_inv, ['Amount Raised'])
-        st.dataframe(inv_display, use_container_width=True, height=400)
+        st.dataframe(filtered_inv, use_container_width=True, height=400)
     
     with tab2:
         # Top 3 deals
         top_deals = filtered_inv.copy()
         
-        # Improved parsing function to handle B and M suffixes
+        # Parse function - values in Excel are already actual dollars like "$467,000,000"
         def parse_amount_value(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+            val_str = str(val).replace('$', '').replace(',', '').strip()
             try:
-                if 'B' in val_str:
-                    # Value is in billions, convert to millions
-                    return float(val_str.replace('B', '')) * 1000
-                elif 'M' in val_str:
-                    # Value is already in millions
-                    return float(val_str.replace('M', ''))
-                else:
-                    # Plain number, assume millions
-                    return float(val_str)
+                # Value is already in actual dollars, not millions
+                return float(val_str)
             except:
                 return 0
         
@@ -487,15 +439,10 @@ def show_deal_activity(ma_df, inv_df):
         top_deals = top_deals.nlargest(3, 'Amount_Numeric')
         
         for idx, row in top_deals.iterrows():
-            # Get the numeric value and format with commas (full number, no abbreviation)
-            value = row['Amount_Numeric']
-            if value > 0:
-                # Convert millions to actual dollar amount and format with commas
-                formatted_value = f"${value * 1000000:,.0f}"
-            else:
-                formatted_value = "Undisclosed"
+            # Value is already in actual dollars, just use it directly from Excel
+            formatted_value = str(row['Amount Raised']) if row['Amount Raised'] != 'Undisclosed' else 'Undisclosed'
             
-            # Display with full number format - company name only
+            # Display with value directly from Excel (already formatted)
             st.markdown(f"**{row['Company']}**")
             st.markdown(f"<h1 style='margin-top: -10px; margin-bottom: -10px; color: #ff7f0e;'>{formatted_value}</h1>", unsafe_allow_html=True)
             st.markdown("---")
@@ -549,9 +496,9 @@ def show_jp_morgan_summary():
         st.markdown("""
         • **Q1 2025**: $3.7B across 117 rounds - Strong quarter with larger investments into fewer companies, including 13 rounds over $100M
         
-        • **Q2 2025**: $2.3B - Decreased from Q1 despite strong start to the year
+        • **Q2 2025**: $2.6B across 90 rounds - 90 venture rounds totaling $2.6 billion in Q2 2025
         
-        • **Q3 2025**: $2.9B across 67 rounds - Slight decline from Q3 2024, with year-to-date total at $9.5B across 259 rounds
+        • **Q3 2025**: $2.9B across 67 rounds - Slight decline from Q3 2024, with year-to-date total at $9.2B across 274 rounds
         
         • **Key Trend**: Late-stage rounds (Series B+) dominate at $7.9B YTD, while early-stage (Seed/Series A) continues to lag
         """)
