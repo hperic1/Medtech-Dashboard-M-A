@@ -392,7 +392,7 @@ def show_deal_activity(ma_df, inv_df):
         filtered_ma = filtered_ma[mask]
     
     # Tabs for table, top deals, and charts
-    tab1, tab2, tab3 = st.tabs(["ðŸ“Š Table", "ðŸ† Top Deals", "ðŸ“ˆ Charts"])
+    tab1, tab2, tab3 = st.tabs(["📝 Add Manual Deals", "📋 Deal Extraction", "📊 Upload JP Morgan Report"])
     
     with tab1:
         # Create display dataframe with sortable numeric values
@@ -497,7 +497,7 @@ def show_deal_activity(ma_df, inv_df):
         filtered_inv = filtered_inv[mask]
     
     # Tabs for table, top deals, and charts
-    tab1, tab2, tab3 = st.tabs(["ðŸ“Š Table", "ðŸ† Top Deals", "ðŸ“ˆ Charts"])
+    tab1, tab2, tab3 = st.tabs(["📝 Add Manual Deals", "📋 Deal Extraction", "📊 Upload JP Morgan Report"])
     
     with tab1:
         # Format Amount Raised column for display with sortable numeric values
@@ -843,7 +843,7 @@ def show_data_management(ma_df, inv_df):
     """Data management page for adding deals and uploading JP Morgan reports"""
     st.header("Data Management")
     
-    tab1, tab2, tab3 = st.tabs(["ðŸ“ Add Manual Deals", "ðŸŒ Web Scraper", "ðŸ“Š Upload JP Morgan Report"])
+    tab1, tab2, tab3 = st.tabs(["📝 Add Manual Deals", "📋 Deal Extraction", "📊 Upload JP Morgan Report"])
     
     with tab1:
         show_manual_deal_entry(ma_df, inv_df)
@@ -853,7 +853,6 @@ def show_data_management(ma_df, inv_df):
     
     with tab3:
         show_jp_morgan_upload()
-
     
     # Add undo button at the bottom
     st.markdown("---")
@@ -870,6 +869,7 @@ def show_data_management(ma_df, inv_df):
         with col2:
             if 'last_backup_time' in st.session_state:
                 st.caption(f"Last change: {st.session_state.last_backup_time.strftime('%I:%M %p')}")
+
 
 def show_manual_deal_entry(ma_df, inv_df):
     """Manual deal entry forms"""
@@ -1410,6 +1410,83 @@ def show_text_parser(ma_df, inv_df):
     # Display and edit extracted deals
     if 'scraped_deals' in st.session_state and st.session_state.scraped_deals:
         process_extracted_deals(st.session_state.scraped_deals, ma_df, inv_df)
+def show_jp_morgan_upload():
+    """JP Morgan report upload and data extraction"""
+    st.subheader("Upload JP Morgan MedTech Industry Report")
+    
+    st.info("""
+    ðŸ“„ **Instructions:**
+    1. Upload the quarterly JP Morgan MedTech Industry Report (PDF or text)
+    2. The system will extract key data for M&A and Venture activity
+    3. Charts and key takeaways will be automatically updated in the JP Morgan Summary page
+    """)
+    
+    # File uploader
+    uploaded_file = st.file_uploader(
+        "Choose JP Morgan Report", 
+        type=['pdf', 'txt', 'docx'],
+        help="Upload the quarterly JP Morgan MedTech Industry Report"
+    )
+    
+    if uploaded_file is not None:
+        st.success(f"âœ… File uploaded: {uploaded_file.name}")
+        
+        # Quarter selection
+        col1, col2 = st.columns(2)
+        with col1:
+            report_year = st.selectbox("Report Year", [2025, 2024, 2023])
+        with col2:
+            report_quarter = st.selectbox("Report Quarter", ["Q1", "Q2", "Q3", "Q4"])
+        
+        st.markdown("### Enter Data Manually")
+        st.markdown("Please enter the key metrics from the report:")
+        
+        with st.form("jp_morgan_data_form"):
+            st.markdown("#### M&A Activity")
+            col1, col2 = st.columns(2)
+            with col1:
+                ma_value = st.number_input("M&A Deal Value ($M)", min_value=0.0, value=0.0, step=100.0)
+            with col2:
+                ma_count = st.number_input("M&A Deal Count", min_value=0, value=0, step=1)
+            
+            st.markdown("#### Venture Capital")
+            col1, col2 = st.columns(2)
+            with col1:
+                vc_value = st.number_input("Venture Deal Value ($M)", min_value=0.0, value=0.0, step=100.0)
+            with col2:
+                vc_count = st.number_input("Venture Deal Count", min_value=0, value=0, step=1)
+            
+            st.markdown("#### Key Takeaways")
+            ma_takeaway = st.text_area("M&A Key Takeaway", placeholder="Enter key insight for M&A activity...")
+            vc_takeaway = st.text_area("Venture Capital Key Takeaway", placeholder="Enter key insight for VC activity...")
+            
+            submitted = st.form_submit_button("ðŸ’¾ Save JP Morgan Data")
+            
+            if submitted:
+                # Save the data to a JSON file or database
+                jp_morgan_data = {
+                    'year': report_year,
+                    'quarter': report_quarter,
+                    'ma': {'value': ma_value, 'count': ma_count, 'takeaway': ma_takeaway},
+                    'venture': {'value': vc_value, 'count': vc_count, 'takeaway': vc_takeaway}
+                }
+                
+                # Create data directory if it doesn't exist
+                os.makedirs('data', exist_ok=True)
+                
+                # Save to JSON file
+                import json
+                json_path = f'data/jp_morgan_{report_year}_{report_quarter}.json'
+                with open(json_path, 'w') as f:
+                    json.dump(jp_morgan_data, f, indent=2)
+                
+                st.success(f"âœ… JP Morgan {report_year} {report_quarter} data saved successfully!")
+                st.info("ðŸ“Š The JP Morgan Summary page will now reflect this data. Navigate to 'JP Morgan Summary' to view the updated charts.")
+                st.balloons()
+
+if __name__ == "__main__":
+    main(
+
 def show_jp_morgan_upload():
     """JP Morgan report upload and data extraction"""
     st.subheader("Upload JP Morgan MedTech Industry Report")
