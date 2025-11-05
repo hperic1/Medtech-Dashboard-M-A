@@ -187,10 +187,33 @@ def format_currency(value):
 def create_quarterly_chart(df, value_col, title):
     """Create quarterly stacked bar chart with deal count overlay - NO GRIDLINES"""
     try:
+        # Function to parse values including text formats like "88 million"
+        def parse_value(v):
+            if v == 'Undisclosed' or pd.isna(v):
+                return 0
+            val_str = str(v).replace('$', '').replace(',', '').strip().upper()
+            try:
+                # Handle formats like "88 million", "2 billion"
+                if 'BILLION' in val_str:
+                    num = float(val_str.replace('BILLION', '').strip())
+                    return num * 1000000000
+                elif 'MILLION' in val_str:
+                    num = float(val_str.replace('MILLION', '').strip())
+                    return num * 1000000
+                elif 'B' in val_str:
+                    num = float(val_str.replace('B', '').strip())
+                    return num * 1000000000
+                elif 'M' in val_str:
+                    num = float(val_str.replace('M', '').strip())
+                    return num * 1000000
+                else:
+                    return float(val_str)
+            except:
+                return 0
+        
         # Prepare data
         quarterly_data = df.groupby('Quarter').agg({
-            value_col: lambda x: sum([float(str(v).replace('$', '').replace('B', '').replace('M', '').replace(',', '')) 
-                                     if v != 'Undisclosed' else 0 for v in x]),
+            value_col: lambda x: sum([parse_value(v) for v in x]),
             'Company': 'count'
         }).reset_index()
         quarterly_data.columns = ['Quarter', 'Total_Value', 'Deal_Count']
@@ -450,9 +473,23 @@ def show_deal_activity(ma_df, inv_df):
         def parse_to_numeric(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return -1  # Changed from 0 to -1 to sort Undisclosed to bottom
-            val_str = str(val).replace('$', '').replace(',', '').strip()
+            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
             try:
-                return float(val_str)
+                # Handle formats like "88 million", "2 billion"
+                if 'BILLION' in val_str:
+                    num = float(val_str.replace('BILLION', '').strip())
+                    return num * 1000000000
+                elif 'MILLION' in val_str:
+                    num = float(val_str.replace('MILLION', '').strip())
+                    return num * 1000000
+                elif 'B' in val_str:
+                    num = float(val_str.replace('B', '').strip())
+                    return num * 1000000000
+                elif 'M' in val_str:
+                    num = float(val_str.replace('M', '').strip())
+                    return num * 1000000
+                else:
+                    return float(val_str)
             except:
                 return -1
         
@@ -485,10 +522,24 @@ def show_deal_activity(ma_df, inv_df):
         def parse_deal_value(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip()
+            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
             try:
-                # Value is already in actual dollars, not millions
-                return float(val_str)
+                # Handle formats like "88 million", "2 billion"
+                if 'BILLION' in val_str:
+                    num = float(val_str.replace('BILLION', '').strip())
+                    return num * 1000000000
+                elif 'MILLION' in val_str:
+                    num = float(val_str.replace('MILLION', '').strip())
+                    return num * 1000000
+                elif 'B' in val_str:
+                    num = float(val_str.replace('B', '').strip())
+                    return num * 1000000000
+                elif 'M' in val_str:
+                    num = float(val_str.replace('M', '').strip())
+                    return num * 1000000
+                else:
+                    # Value is already in actual dollars, not millions
+                    return float(val_str)
             except:
                 return 0
         
@@ -553,15 +604,51 @@ def show_deal_activity(ma_df, inv_df):
         
         # Add numeric sort column - use -1 for Undisclosed so it goes to bottom
         inv_display['_Amount_Numeric'] = inv_display['Amount Raised'].apply(
-            lambda x: float(x) if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else -1
+            lambda x: parse_investment_amount(x)
         )
+        
+        def parse_investment_amount(val):
+            if val == 'Undisclosed' or pd.isna(val):
+                return -1
+            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
+            try:
+                # Handle formats like "88 million", "2 billion"
+                if 'BILLION' in val_str:
+                    num = float(val_str.replace('BILLION', '').strip())
+                    return num * 1000000000
+                elif 'MILLION' in val_str:
+                    num = float(val_str.replace('MILLION', '').strip())
+                    return num * 1000000
+                elif 'B' in val_str:
+                    num = float(val_str.replace('B', '').strip())
+                    return num * 1000000000
+                elif 'M' in val_str:
+                    num = float(val_str.replace('M', '').strip())
+                    return num * 1000000
+                else:
+                    # Check if it's a plain number or has decimal
+                    if '.' in val_str or val_str.replace('-','').isdigit():
+                        return float(val_str)
+                    return -1
+            except:
+                return -1
         
         # Sort by Amount descending by default (highest amounts first, Undisclosed at bottom)
         inv_display = inv_display.sort_values('_Amount_Numeric', ascending=False)
         
-        # Format for display
-        inv_display['Amount Raised'] = inv_display['Amount Raised'].apply(
-            lambda x: f"${x:,.0f}" if pd.notna(x) and x != 'Undisclosed' and str(x).replace('.','').replace('-','').isdigit() else x
+        # Format for display - handle both numeric and already-formatted values
+        def format_amount_for_display(val, numeric_val):
+            if val == 'Undisclosed' or pd.isna(val) or numeric_val == -1:
+                return val
+            # If numeric value is large, format it
+            if numeric_val >= 1000000:
+                return f"${numeric_val:,.0f}"
+            # Otherwise return original
+            return val
+        
+        inv_display['Amount Raised'] = inv_display.apply(
+            lambda row: format_amount_for_display(row['Amount Raised'], row['_Amount_Numeric']),
+            axis=1
         )
         
         # Display without the numeric column
@@ -583,14 +670,28 @@ def show_deal_activity(ma_df, inv_df):
         # Top 3 deals
         top_deals = filtered_inv.copy()
         
-        # Parse function - values in Excel are already actual dollars like "$467,000,000"
+        # Parse function - values in Excel may be in various formats
         def parse_amount_value(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip()
+            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
             try:
-                # Value is already in actual dollars, not millions
-                return float(val_str)
+                # Handle formats like "88 million", "2 billion"
+                if 'BILLION' in val_str:
+                    num = float(val_str.replace('BILLION', '').strip())
+                    return num * 1000000000
+                elif 'MILLION' in val_str:
+                    num = float(val_str.replace('MILLION', '').strip())
+                    return num * 1000000
+                elif 'B' in val_str:
+                    num = float(val_str.replace('B', '').strip())
+                    return num * 1000000000
+                elif 'M' in val_str:
+                    num = float(val_str.replace('M', '').strip())
+                    return num * 1000000
+                else:
+                    # Value is already in actual dollars, not millions
+                    return float(val_str)
             except:
                 return 0
         
@@ -626,13 +727,27 @@ def show_jp_morgan_summary(ma_df, inv_df):
     def calc_quarterly_stats(df, quarter, value_col):
         q_data = df[df['Quarter'] == quarter]
         
-        # Parse values
+        # Parse values - handle text formats like "88 million"
         def parse_value(val):
             if val == 'Undisclosed' or pd.isna(val):
                 return 0
-            val_str = str(val).replace('$', '').replace(',', '').strip()
+            val_str = str(val).replace('$', '').replace(',', '').strip().upper()
             try:
-                return float(val_str)
+                # Handle formats like "88 million", "2 billion"
+                if 'BILLION' in val_str:
+                    num = float(val_str.replace('BILLION', '').strip())
+                    return num * 1000000000
+                elif 'MILLION' in val_str:
+                    num = float(val_str.replace('MILLION', '').strip())
+                    return num * 1000000
+                elif 'B' in val_str:
+                    num = float(val_str.replace('B', '').strip())
+                    return num * 1000000000
+                elif 'M' in val_str:
+                    num = float(val_str.replace('M', '').strip())
+                    return num * 1000000
+                else:
+                    return float(val_str)
             except:
                 return 0
         
