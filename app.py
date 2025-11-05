@@ -1395,6 +1395,95 @@ def show_web_scraper(ma_df, inv_df):
                 import io
                 import re
                 
+                # Currency conversion rates to USD (approximate)
+                currency_rates = {
+                    '£': 1.27,    # GBP
+                    '€': 1.09,    # EUR
+                    'A$': 0.65,   # AUD
+                    'AU$': 0.65,  # AUD
+                    'CA$': 0.72,  # CAD
+                    'C$': 0.72,   # CAD
+                }
+                
+                def convert_to_usd(amount, currency_symbol):
+                    """Convert foreign currency to USD"""
+                    if currency_symbol in currency_rates:
+                        return amount * currency_rates[currency_symbol]
+                    return amount
+                
+                def extract_table_deals(text):
+                    """Extract deals from table-formatted text"""
+                    deals = []
+                    
+                    # Split into lines
+                    lines = text.split('\n')
+                    
+                    current_deal = {}
+                    
+                    for i, line in enumerate(lines):
+                        line = line.strip()
+                        
+                        # Look for deal type indicators
+                        if any(x in line for x in ['Series A', 'Series B', 'Series C', 'Series D', 
+                                                     'Seed', 'IPO', 'Grant', 'Mergers and Acquisitions',
+                                                     'Strategic Partnership', 'Other', 'Debt Financing',
+                                                     'Later Stage']):
+                            if current_deal and 'company' in current_deal:
+                                deals.append(current_deal)
+                            current_deal = {'deal_type': line}
+                            
+                            # Look backwards for company name
+                            for j in range(i-1, max(i-3, 0), -1):
+                                prev_line = lines[j].strip()
+                                if prev_line and len(prev_line) > 2 and prev_line[0].isupper():
+                                    current_deal['company'] = prev_line
+                                    break
+                        
+                        # Extract amounts with currency symbols
+                        amount_patterns = [
+                            r'([$£€A]\$?|AU\$|CA\$)([\d,]+(?:\.\d+)?)\s*(million|billion|M|B)?',
+                            r'([\d,]+(?:\.\d+)?)\s*(million|billion|M|B)',
+                        ]
+                        
+                        for pattern in amount_patterns:
+                            match = re.search(pattern, line, re.IGNORECASE)
+                            if match:
+                                groups = match.groups()
+                                if len(groups) == 3:
+                                    currency = groups[0] if groups[0] else '$'
+                                    amount = float(groups[1].replace(',', ''))
+                                    unit = groups[2] if groups[2] else ''
+                                else:
+                                    currency = '$'
+                                    amount = float(groups[0].replace(',', ''))
+                                    unit = groups[1] if groups[1] else ''
+                                
+                                # Convert to USD if needed
+                                if currency != '$':
+                                    amount = convert_to_usd(amount, currency)
+                                
+                                # Convert to actual dollar amount
+                                if unit and unit.upper() in ['B', 'BILLION']:
+                                    amount = amount * 1000
+                                
+                                current_deal['amount'] = f"{amount}M"
+                                break
+                        
+                        # Look for technology description
+                        if 'technology' not in current_deal and len(line) > 30 and any(word in line.lower() for word in ['platform', 'device', 'system', 'technology', 'solution']):
+                            current_deal['technology'] = line[:200]
+                        
+                        # Extract dates
+                        date_match = re.search(r'(\d{2}/\d{2}/\d{4})', line)
+                        if date_match:
+                            current_deal['date'] = date_match.group(1)
+                    
+                    # Add last deal
+                    if current_deal and 'company' in current_deal:
+                        deals.append(current_deal)
+                    
+                    return deals
+                
                 # Read PDF
                 pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_pdf.read()))
                 
@@ -1414,67 +1503,32 @@ def show_web_scraper(ma_df, inv_df):
                 
                 st.success(f"✅ Extracted {len(combined_text)} characters from PDF")
                 
-                # Extract deals from the text using same patterns
+                # Try table extraction first
+                table_deals = extract_table_deals(combined_text)
+                
                 extracted_deals = []
                 
-                patterns = [
-                    r'([A-Z][A-Za-z\s&\.]+?)\s+(?:acquired|purchased|bought)\s+(?:by\s+)?([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
-                    r'([A-Z][A-Za-z\s&\.]+?)\s+(?:raises|raised|secures|secured)\s+\$?([\d,\.]+)\s*(billion|million|B|M)',
-                    r'([A-Z][A-Za-z\s&\.]+?)\s+(?:acquires|purchases|buys)\s+([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
-                    r'([A-Z][A-Za-z\s&\.]+?)\s+to\s+(?:acquire|purchase|buy)\s+([A-Z][A-Za-z\s&\.]+?)(?:\s+for\s+\$?([\d,\.]+)\s*(billion|million|B|M))?',
-                ]
-                
-                for pattern in patterns:
-                    matches = re.finditer(pattern, combined_text, re.IGNORECASE | re.MULTILINE)
-                    for match in matches:
-                        groups = match.groups()
-                        match_text = match.group(0).lower()
-                        
-                        if 'acquir' in match_text or 'purchas' in match_text or 'bought' in match_text or 'buys' in match_text:
+                # Convert table deals to standard format
+                for deal in table_deals:
+                    deal_type = 'Venture'
+                    if 'deal_type' in deal:
+                        if 'merger' in deal['deal_type'].lower() or 'acquisition' in deal['deal_type'].lower():
                             deal_type = 'M&A'
-                            if len(groups) >= 2:
-                                company = groups[0].strip()
-                                acquirer = groups[1].strip() if len(groups) > 1 else ''
-                                value = groups[2] if len(groups) > 2 and groups[2] else 'Undisclosed'
-                                unit = groups[3] if len(groups) > 3 and groups[3] else ''
-                                
-                                # Clean up value
-                                if value != 'Undisclosed':
-                                    value = value.replace(',', '')
-                                
-                                extracted_deals.append({
-                                    'type': deal_type,
-                                    'company': company,
-                                    'acquirer': acquirer,
-                                    'value': f"{value}{unit}" if value != 'Undisclosed' else 'Undisclosed',
-                                    'description': match.group(0)[:200]
-                                })
-                        
-                        elif 'rais' in match_text or 'secur' in match_text:
-                            deal_type = 'Venture'
-                            if len(groups) >= 2:
-                                company = groups[0].strip()
-                                value = groups[1] if len(groups) > 1 and groups[1] else 'Undisclosed'
-                                unit = groups[2] if len(groups) > 2 and groups[2] else ''
-                                
-                                # Clean up value
-                                if value != 'Undisclosed':
-                                    value = value.replace(',', '')
-                                
-                                extracted_deals.append({
-                                    'type': deal_type,
-                                    'company': company,
-                                    'acquirer': '',
-                                    'value': f"{value}{unit}" if value != 'Undisclosed' else 'Undisclosed',
-                                    'description': match.group(0)[:200]
-                                })
+                    
+                    extracted_deals.append({
+                        'type': deal_type,
+                        'company': deal.get('company', 'Unknown'),
+                        'acquirer': '',
+                        'value': deal.get('amount', 'Undisclosed'),
+                        'description': deal.get('technology', '')[:200]
+                    })
                 
                 # Remove duplicates based on company name
                 seen = set()
                 unique_deals = []
                 for deal in extracted_deals:
                     key = (deal['company'].lower(), deal['value'])
-                    if key not in seen:
+                    if key not in seen and deal['company'] != 'Unknown':
                         seen.add(key)
                         unique_deals.append(deal)
                 
