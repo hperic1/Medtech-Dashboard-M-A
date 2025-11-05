@@ -151,12 +151,12 @@ def create_quarterly_chart(df, value_col, title):
         fig.add_trace(go.Bar(
             x=quarterly_data['Quarter'],
             y=quarterly_data['Total_Value'],
-            name='Deal Value ($M)',
+            name='Deal Value',
             marker_color='#1f77b4',
-            text=[format_currency(v) for v in quarterly_data['Total_Value']],
+            text=[f"${v:,.0f}" for v in quarterly_data['Total_Value']],  # Full amount with commas
             textposition='outside',
             yaxis='y',
-            hovertemplate='<b>%{x}</b><br>Deal Value: %{text}<br><extra></extra>'
+            hovertemplate='<b>%{x}</b><br>Deal Value: $%{y:,.0f}<br><extra></extra>'
         ))
         
         # Add line chart for deal count
@@ -482,25 +482,21 @@ def show_jp_morgan_summary():
     with col1:
         st.markdown("**M&A Activity**")
         st.markdown("""
-        • **Q1 2025**: $9.2B across 57 deals - Strong start with strategic acquisitions including Stryker's $4.9B acquisition of Inari Medical
+        • **Q1 2025**: 57 medtech M&A deals were announced, totaling $9.2 billion
         
-        • **Q2 2025**: $2.1B across 43 deals - Activity slowed as market stability concerns affected deal appetite
+        • **Q2 2025**: 43 medtech M&A deals were announced, totaling $2.1 billion  
         
-        • **Q3 2025**: $21.7B across 65 deals - Significant surge in deal value and volume, surpassing full-year 2024 figures
-        
-        • **Key Focus**: Strategic consolidation in cardiovascular and minimally invasive technologies continues to drive large-scale transactions
+        • **Q3 2025**: 65 medtech M&A deals were announced, totaling $21.7 billion in upfront cash and equity
         """)
         
     with col2:
         st.markdown("**Venture Capital**")
         st.markdown("""
-        • **Q1 2025**: $3.7B across 117 rounds - Strong quarter with larger investments into fewer companies, including 13 rounds over $100M
+        • **Q1 2025**: Medtech venture investment activity continued to see larger rounds into fewer companies to post a higher dollar total for Q1 2025, exceeding Q1 2024
         
-        • **Q2 2025**: $2.6B across 90 rounds - 90 venture rounds totaling $2.6 billion in Q2 2025
+        • **Q2 2025**: The medtech venture landscape continues to show resilience, with total venture funding reaching $6.8 billion in the first half of 2025, positioning the sector to potentially exceed 2024's $12.7 billion full-year total
         
-        • **Q3 2025**: $2.9B across 67 rounds - Slight decline from Q3 2024, with year-to-date total at $9.2B across 274 rounds
-        
-        • **Key Trend**: Late-stage rounds (Series B+) dominate at $7.9B YTD, while early-stage (Seed/Series A) continues to lag
+        • **Q3 2025**: Medtech venture funding started the year strong yet had a weaker Q2 and Q3 in a challenging venture funding environment across all of healthcare and life sciences
         """)
 
 def show_data_management(ma_df, inv_df):
