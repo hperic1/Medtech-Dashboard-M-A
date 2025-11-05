@@ -1367,20 +1367,19 @@ def process_extracted_deals(extracted_deals, ma_df, inv_df):
             st.rerun()
 
 def show_bulk_excel_upload(ma_df, inv_df):
-    """Bulk CSV/Excel upload with column mapping"""
+    """Bulk CSV/Excel upload with automatic column detection and direct import"""
     st.subheader("📊 Bulk Excel/CSV Upload")
     
     st.info("""
     **Upload a CSV or Excel file with deal data**
     
-    Your file can have any column names. You'll map them to the required fields:
-    - **Company** (required)
-    - **Technology/Description** (required)
-    - **Deal Value or Amount Raised** (required)
-    - **Date** (required - we'll auto-detect quarter/month)
-    - **Acquirer** (for M&A deals)
-    - **Lead Investors** (for Venture deals)
-    - **Type** (if your file has mixed deal types)
+    The system will automatically detect columns or let you map them:
+    - **Company**, **Technology**, **Type**, **Amount**, **Date**
+    - **Investors/Deal Details** (for acquirer or lead investors)
+    - Supports multiple currencies (£, €, $, AU$, CA$, CHF)
+    - Auto-converts to USD
+    - Checks for duplicates
+    - Undo available after import
     """)
     
     uploaded_file = st.file_uploader(
@@ -1404,103 +1403,269 @@ def show_bulk_excel_upload(ma_df, inv_df):
             st.markdown("### 📋 File Preview")
             st.dataframe(df.head(10), use_container_width=True)
             
-            # Column mapping
-            st.markdown("### 🔗 Map Your Columns")
+            # Try auto-detection first
+            auto_detected = auto_detect_columns(df)
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**Required Fields**")
+            if auto_detected['confidence'] == 'high':
+                st.success("🎯 **Columns auto-detected!** Review mapping below:")
                 
-                company_col = st.selectbox("Company Column*", [''] + list(df.columns), key="company_col")
-                tech_col = st.selectbox("Technology/Description Column*", [''] + list(df.columns), key="tech_col")
-                value_col = st.selectbox("Deal Value/Amount Column*", [''] + list(df.columns), key="value_col")
-                date_col = st.selectbox("Date Column*", [''] + list(df.columns), key="date_col")
-            
-            with col2:
-                st.markdown("**Deal Type Configuration**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**Detected Mappings:**")
+                    for field, col in auto_detected['mapping'].items():
+                        st.markdown(f"✅ **{field}**: `{col}`")
                 
-                deal_type_option = st.radio(
-                    "Primary Deal Type",
-                    ["M&A Activity", "Venture Investment", "Mixed (has Type column)"],
-                    help="Select the primary type of deals in your file"
-                )
+                with col2:
+                    st.markdown("**Import Settings:**")
+                    deal_type_detected = auto_detected.get('deal_type', 'Mixed')
+                    st.markdown(f"📊 **Deal Type**: {deal_type_detected}")
+                    st.markdown(f"💱 **Currency Conversion**: Enabled")
+                    st.markdown(f"🔍 **Duplicate Check**: Enabled")
                 
-                if deal_type_option == "Mixed (has Type column)":
-                    type_col = st.selectbox(
-                        "Type Column*",
-                        [''] + list(df.columns),
-                        key="type_col",
-                        help="Column that indicates whether each deal is M&A or Venture"
-                    )
-                else:
-                    type_col = None
+                # Quick import button
+                col_import, col_manual = st.columns([2, 2])
+                with col_import:
+                    if st.button("⚡ Import All Deals Now", type="primary", use_container_width=True):
+                        with st.spinner("Processing and importing deals..."):
+                            imported_ma, imported_inv, skipped = direct_import_deals(
+                                df, auto_detected['mapping'], ma_df, inv_df
+                            )
+                            
+                            if save_data(ma_df, inv_df):
+                                success_msg = f"✅ Successfully imported {imported_ma} M&A deals and {imported_inv} Venture deals!"
+                                if skipped:
+                                    success_msg += f"\n\n⚠️ Skipped {len(skipped)} duplicate(s)"
+                                
+                                st.success(success_msg)
+                                st.balloons()
+                                st.cache_data.clear()
+                                st.rerun()
                 
-                # M&A specific fields
-                if deal_type_option in ["M&A Activity", "Mixed (has Type column)"]:
-                    acquirer_col = st.selectbox(
-                        "Acquirer Column" + ("*" if deal_type_option == "M&A Activity" else " (optional)"),
-                        [''] + list(df.columns),
-                        key="acquirer_col",
-                        help="Company acquiring the target"
-                    )
-                else:
-                    acquirer_col = None
+                with col_manual:
+                    show_manual_mapping = st.checkbox("🔧 Manual Column Mapping", value=False)
+            else:
+                st.warning("⚠️ Could not auto-detect columns. Please map manually:")
+                show_manual_mapping = True
+            
+            # Manual column mapping (if needed)
+            if 'show_manual_mapping' in locals() and show_manual_mapping:
+                st.markdown("---")
+                st.markdown("### 🔗 Manual Column Mapping")
                 
-                # Venture specific fields
-                if deal_type_option in ["Venture Investment", "Mixed (has Type column)"]:
-                    investors_col = st.selectbox(
-                        "Lead Investors Column (optional)",
-                        [''] + list(df.columns),
-                        key="investors_col",
-                        help="Primary investors in the funding round"
-                    )
-                else:
-                    investors_col = None
-            
-            # Validation
-            required_filled = all([company_col, tech_col, value_col, date_col])
-            
-            if deal_type_option == "M&A Activity":
-                required_filled = required_filled and acquirer_col
-            elif deal_type_option == "Mixed (has Type column)":
-                required_filled = required_filled and type_col
-            
-            # Process button
-            col_btn1, col_btn2 = st.columns([3, 1])
-            with col_btn1:
-                process_button = st.button(
-                    "🔄 Process and Preview Deals",
-                    type="primary",
-                    use_container_width=True,
-                    disabled=not required_filled
-                )
-            with col_btn2:
-                if not required_filled:
-                    st.warning("⚠️ Fill required fields")
-            
-            if process_button:
-                with st.spinner("Processing deals..."):
-                    processed_deals = process_bulk_upload(
-                        df, company_col, tech_col, value_col, date_col,
-                        deal_type_option, type_col, acquirer_col, investors_col
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**Required Fields**")
+                    
+                    company_col = st.selectbox("Company Column*", [''] + list(df.columns), key="company_col")
+                    tech_col = st.selectbox("Technology Column*", [''] + list(df.columns), key="tech_col")
+                    value_col = st.selectbox("Amount Column*", [''] + list(df.columns), key="value_col")
+                    date_col = st.selectbox("Date Column*", [''] + list(df.columns), key="date_col")
+                
+                with col2:
+                    st.markdown("**Deal Type Configuration**")
+                    
+                    deal_type_option = st.radio(
+                        "Primary Deal Type",
+                        ["M&A Activity", "Venture Investment", "Mixed (has Type column)"],
+                        help="Select the primary type of deals in your file"
                     )
                     
-                    if processed_deals:
-                        st.session_state.scraped_deals = processed_deals
-                        st.success(f"✅ Processed {len(processed_deals)} deals!")
-                        st.rerun()
+                    if deal_type_option == "Mixed (has Type column)":
+                        type_col = st.selectbox("Type Column*", [''] + list(df.columns), key="type_col")
                     else:
-                        st.error("❌ No valid deals found in the file")
+                        type_col = None
+                    
+                    investors_col = st.selectbox(
+                        "Investors/Acquirer Column",
+                        [''] + list(df.columns),
+                        key="investors_col"
+                    )
+                
+                # Validation
+                required_filled = all([company_col, tech_col, value_col, date_col])
+                
+                if deal_type_option == "Mixed (has Type column)":
+                    required_filled = required_filled and type_col
+                
+                # Process button
+                if st.button("🔄 Import with Manual Mapping", type="primary", disabled=not required_filled, use_container_width=True):
+                    with st.spinner("Processing and importing deals..."):
+                        manual_mapping = {
+                            'company': company_col,
+                            'technology': tech_col,
+                            'amount': value_col,
+                            'date': date_col,
+                            'type': type_col if type_col else None,
+                            'investors': investors_col if investors_col else None
+                        }
+                        
+                        imported_ma, imported_inv, skipped = direct_import_deals(
+                            df, manual_mapping, ma_df, inv_df
+                        )
+                        
+                        if save_data(ma_df, inv_df):
+                            success_msg = f"✅ Successfully imported {imported_ma} M&A deals and {imported_inv} Venture deals!"
+                            if skipped:
+                                success_msg += f"\n\n⚠️ Skipped {len(skipped)} duplicate(s):\n" + "\n".join(f"• {s}" for s in skipped[:5])
+                            
+                            st.success(success_msg)
+                            st.balloons()
+                            st.cache_data.clear()
+                            st.rerun()
         
         except Exception as e:
             st.error(f"❌ Error reading file: {str(e)}")
             st.info("💡 Make sure your file is a valid CSV or Excel file")
 
-def process_bulk_upload(df, company_col, tech_col, value_col, date_col, 
-                       deal_type_option, type_col, acquirer_col, investors_col):
-    """Process bulk uploaded file and convert to deal format"""
-    deals = []
+def auto_detect_columns(df):
+    """Automatically detect column mappings based on common patterns"""
+    columns_lower = {col.lower(): col for col in df.columns}
+    
+    mapping = {}
+    confidence = 'high'
+    
+    # Detect Company column
+    for pattern in ['company', 'firm', 'startup', 'business']:
+        if pattern in columns_lower:
+            mapping['company'] = columns_lower[pattern]
+            break
+    
+    # Detect Technology column
+    for pattern in ['technology', 'tech', 'description', 'desc', 'product']:
+        if pattern in columns_lower:
+            mapping['technology'] = columns_lower[pattern]
+            break
+    
+    # Detect Type column
+    for pattern in ['type', 'deal type', 'category', 'class']:
+        if pattern in columns_lower:
+            mapping['type'] = columns_lower[pattern]
+            break
+    
+    # Detect Amount column
+    for pattern in ['amount', 'value', 'price', 'deal value', 'funding']:
+        if pattern in columns_lower:
+            mapping['amount'] = columns_lower[pattern]
+            break
+    
+    # Detect Date column
+    for pattern in ['date', 'announcement', 'announced', 'closed']:
+        if pattern in columns_lower:
+            mapping['date'] = columns_lower[pattern]
+            break
+    
+    # Detect Investors/Acquirer column
+    for pattern in ['investor', 'acquirer', 'buyer', 'deal details', 'investors/deal']:
+        if pattern in columns_lower:
+            mapping['investors'] = columns_lower[pattern]
+            break
+    
+    # Check confidence
+    required_fields = ['company', 'technology', 'amount', 'date']
+    if all(field in mapping for field in required_fields):
+        confidence = 'high'
+    elif len(mapping) >= 3:
+        confidence = 'medium'
+    else:
+        confidence = 'low'
+    
+    # Detect deal type from Type column if present
+    deal_type = 'Mixed'
+    if 'type' in mapping and mapping['type'] in df.columns:
+        type_values = df[mapping['type']].str.lower().unique()
+        has_ma = any('merger' in str(v) or 'acquisition' in str(v) or 'grant' in str(v) 
+                     or 'strategic' in str(v) or 'other' in str(v) for v in type_values)
+        has_venture = any('series' in str(v) or 'seed' in str(v) or 'ipo' in str(v) 
+                         or 'debt' in str(v) for v in type_values)
+        
+        if has_ma and has_venture:
+            deal_type = 'Mixed'
+        elif has_ma:
+            deal_type = 'M&A Activity'
+        elif has_venture:
+            deal_type = 'Venture Investment'
+    
+    return {
+        'mapping': mapping,
+        'confidence': confidence,
+        'deal_type': deal_type
+    }
+
+def convert_currency_to_usd(amount_str, default_currency='$'):
+    """Convert various currencies to USD with rates"""
+    # Currency conversion rates (approximate)
+    conversion_rates = {
+        '$': 1.0,        # USD
+        '£': 1.27,       # GBP
+        '€': 1.09,       # EUR
+        'A$': 0.65,      # AUD
+        'AU$': 0.65,     # AUD
+        'CA$': 0.72,     # CAD
+        'C$': 0.72,      # CAD
+        'CHF': 1.13,     # Swiss Franc
+        'NZ$': 0.60,     # New Zealand Dollar
+        '¥': 0.0068,     # Japanese Yen
+        '₹': 0.012,      # Indian Rupee
+    }
+    
+    if not amount_str or pd.isna(amount_str) or str(amount_str).lower() == 'undisclosed':
+        return 'Undisclosed', None
+    
+    amount_str = str(amount_str).strip()
+    
+    # Detect currency symbol
+    currency = default_currency
+    for symbol in conversion_rates.keys():
+        if symbol in amount_str:
+            currency = symbol
+            break
+    
+    # Extract numeric value
+    # Remove currency symbols and clean
+    clean_str = amount_str
+    for symbol in conversion_rates.keys():
+        clean_str = clean_str.replace(symbol, '')
+    
+    clean_str = clean_str.replace(',', '').strip()
+    
+    try:
+        # Check for million/billion indicators
+        multiplier = 1
+        if 'billion' in clean_str.lower() or 'b' in clean_str.lower():
+            multiplier = 1000000000
+            clean_str = re.sub(r'[bB]illion|[bB]', '', clean_str).strip()
+        elif 'million' in clean_str.lower() or 'm' in clean_str.lower():
+            multiplier = 1000000
+            clean_str = re.sub(r'[mM]illion|[mM]', '', clean_str).strip()
+        elif 'k' in clean_str.lower():
+            multiplier = 1000
+            clean_str = re.sub(r'[kK]', '', clean_str).strip()
+        
+        # Extract just the number
+        number_match = re.search(r'[\d.]+', clean_str)
+        if number_match:
+            amount = float(number_match.group()) * multiplier
+            
+            # Convert to USD
+            usd_amount = amount * conversion_rates.get(currency, 1.0)
+            
+            # Create conversion note if not USD
+            conversion_note = None
+            if currency != '$':
+                conversion_note = f"Converted from {currency}{amount/multiplier:,.0f}{('B' if multiplier >= 1000000000 else 'M' if multiplier >= 1000000 else '')} to USD"
+            
+            return f"${usd_amount:,.0f}", conversion_note
+        else:
+            return 'Undisclosed', None
+    except:
+        return 'Undisclosed', None
+
+def direct_import_deals(df, mapping, ma_df, inv_df):
+    """Import deals directly without review step, with currency conversion and duplicate checking"""
+    added_ma = 0
+    added_inv = 0
+    skipped_duplicates = []
     
     # Month mapping
     month_map = {
@@ -1511,75 +1676,115 @@ def process_bulk_upload(df, company_col, tech_col, value_col, date_col,
     
     for idx, row in df.iterrows():
         try:
-            deal = {}
-            
             # Extract company
-            deal['company'] = str(row[company_col]).strip()
+            company = str(row[mapping['company']]).strip()
+            if not company or company == 'nan':
+                continue
             
             # Extract technology
-            deal['description'] = str(row[tech_col]).strip()[:200]
+            technology = str(row[mapping['technology']]).strip()[:200] if 'technology' in mapping else ''
             
-            # Extract value
-            value_raw = str(row[value_col]).strip()
-            if value_raw.lower() in ['undisclosed', 'not disclosed', 'nan', '']:
-                deal['value'] = 'Undisclosed'
-            else:
-                # Clean and parse value
-                value_clean = re.sub(r'[^\d\.,BMK]', '', value_raw.upper())
-                deal['value'] = value_clean if value_clean else 'Undisclosed'
+            # Extract and convert amount
+            amount_raw = str(row[mapping['amount']]).strip() if 'amount' in mapping else 'Undisclosed'
+            amount_usd, conversion_note = convert_currency_to_usd(amount_raw)
             
             # Determine deal type
-            if deal_type_option == "Mixed (has Type column)" and type_col:
-                type_value = str(row[type_col]).lower()
-                if 'venture' in type_value or 'vc' in type_value or 'investment' in type_value:
-                    deal['type'] = 'Venture'
-                elif 'merger' in type_value or 'acquisition' in type_value or 'm&a' in type_value:
-                    deal['type'] = 'M&A'
-                else:
-                    deal['type'] = 'M&A'  # Default
-            elif deal_type_option == "M&A Activity":
-                deal['type'] = 'M&A'
-            else:
-                deal['type'] = 'Venture'
+            deal_type = 'M&A'  # Default
+            if 'type' in mapping and mapping['type']:
+                type_value = str(row[mapping['type']]).lower()
+                if any(term in type_value for term in ['series', 'seed', 'ipo', 'debt', 'later stage']):
+                    deal_type = 'Venture'
+                elif any(term in type_value for term in ['grant', 'strategic', 'other']):
+                    deal_type = 'M&A'
             
-            # Extract acquirer/investors
-            if deal['type'] == 'M&A' and acquirer_col:
-                deal['acquirer'] = str(row[acquirer_col]).strip()
-            elif deal['type'] == 'Venture' and investors_col:
-                deal['acquirer'] = str(row[investors_col]).strip()  # Used as investors
-            else:
-                deal['acquirer'] = 'Undisclosed'
+            # Extract investors/acquirer
+            investors = 'Undisclosed'
+            if 'investors' in mapping and mapping['investors']:
+                investors = str(row[mapping['investors']]).strip()
             
             # Extract and parse date
-            date_raw = str(row[date_col]).strip()
+            date_raw = str(row[mapping['date']]).strip() if 'date' in mapping else ''
             
-            # Try to parse date
             try:
-                if '/' in date_raw:
-                    date_parts = date_raw.split('/')
-                    month_num = int(date_parts[0])
-                elif '-' in date_raw:
-                    date_obj = pd.to_datetime(date_raw)
-                    month_num = date_obj.month
-                else:
-                    # Try pandas to_datetime
-                    date_obj = pd.to_datetime(date_raw)
-                    month_num = date_obj.month
-                
-                deal['month'] = month_map.get(month_num, 'January')
-                deal['quarter'] = f"Q{(month_num - 1) // 3 + 1}"
+                date_obj = pd.to_datetime(date_raw)
+                month_num = date_obj.month
+                month = month_map.get(month_num, 'January')
+                quarter = f"Q{(month_num - 1) // 3 + 1}"
             except:
-                # Default to Q1 January
-                deal['month'] = 'January'
-                deal['quarter'] = 'Q1'
+                month = 'January'
+                quarter = 'Q1'
             
-            deals.append(deal)
+            # Check for duplicates and add to appropriate dataframe
+            if deal_type == 'M&A':
+                # Check duplicate
+                is_duplicate = False
+                for _, existing_row in ma_df.iterrows():
+                    existing_company = str(existing_row['Company']).strip().lower()
+                    new_company = company.lower()
+                    
+                    if existing_company == new_company or existing_company in new_company or new_company in existing_company:
+                        if str(existing_row['Deal Value']).strip() == amount_usd:
+                            is_duplicate = True
+                            skipped_duplicates.append(f"M&A: {company} ({amount_usd})")
+                            break
+                
+                if not is_duplicate:
+                    # Parse acquirer from investors field
+                    acquirer = investors if investors != 'Undisclosed' else 'Undisclosed'
+                    
+                    new_deal = pd.DataFrame({
+                        'Company': [company],
+                        'Acquirer': [acquirer],
+                        'Deal Type (Merger / Acquisition)': ['Acquisition'],
+                        'Technology/Description': [technology],
+                        'Deal Value': [amount_usd],
+                        'Quarter': [quarter],
+                        'Month': [month]
+                    })
+                    ma_df = pd.concat([ma_df, new_deal], ignore_index=True)
+                    added_ma += 1
+            
+            else:  # Venture
+                # Convert amount to numeric for venture
+                if amount_usd != 'Undisclosed':
+                    try:
+                        amount_numeric = int(float(amount_usd.replace('$', '').replace(',', '')))
+                    except:
+                        amount_numeric = 'Undisclosed'
+                else:
+                    amount_numeric = 'Undisclosed'
+                
+                # Check duplicate
+                is_duplicate = False
+                for _, existing_row in inv_df.iterrows():
+                    existing_company = str(existing_row['Company']).strip().lower()
+                    new_company = company.lower()
+                    
+                    if existing_company == new_company or existing_company in new_company or new_company in existing_company:
+                        if str(existing_row['Amount Raised']).strip() == str(amount_numeric):
+                            is_duplicate = True
+                            display_val = f"${amount_numeric:,}" if amount_numeric != 'Undisclosed' else 'Undisclosed'
+                            skipped_duplicates.append(f"Venture: {company} ({display_val})")
+                            break
+                
+                if not is_duplicate:
+                    new_deal = pd.DataFrame({
+                        'Company': [company],
+                        'Funding type (VC / PE)': ['VC'],
+                        'Technology/Description': [technology],
+                        'Amount Raised': [amount_numeric],
+                        'Lead Investors': [investors],
+                        'Quarter': [quarter],
+                        'Month': [month]
+                    })
+                    inv_df = pd.concat([inv_df, new_deal], ignore_index=True)
+                    added_inv += 1
         
         except Exception as e:
             st.warning(f"⚠️ Skipped row {idx + 1}: {str(e)}")
             continue
     
-    return deals
+    return added_ma, added_inv, skipped_duplicates
 
 def add_deals_to_database(deals_to_add, ma_df, inv_df):
     """Add processed deals to database with duplicate detection"""
