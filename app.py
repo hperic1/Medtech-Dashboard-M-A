@@ -179,6 +179,24 @@ def load_data():
         
         if excel_path is None:
             st.error("❌ Cannot find MedTech_YTD_StandardizedHP_Categorized.xlsx")
+            st.info("""
+            **📁 File Location Issue**
+            
+            The Excel file must be in the same folder as app.py.
+            
+            **Looking in these locations:**
+            """)
+            for path in possible_paths:
+                exists = "✅" if os.path.exists(path) else "❌"
+                st.text(f"{exists} {path}")
+            
+            st.markdown("---")
+            st.info("""
+            **🔧 Quick Fix:**
+            1. Make sure both `app.py` and `MedTech_YTD_StandardizedHP_Categorized.xlsx` are in the **same folder**
+            2. Run the command from that folder: `streamlit run app.py`
+            3. Or drag both files to the same location
+            """)
             return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         
         # Load all three sheets
