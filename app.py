@@ -165,9 +165,12 @@ def load_data():
     """Load data from Excel file"""
     try:
         possible_paths = [
-            'MedTech_YTD_StandardizedHP_Categorized.xlsx',
+            'data/MedTech_YTD_StandardizedHP_Categorized.xlsx',  # In data folder (MOST COMMON)
+            './data/MedTech_YTD_StandardizedHP_Categorized.xlsx',  # In data folder (explicit)
+            'MedTech_YTD_StandardizedHP_Categorized.xlsx',  # Same directory as app.py
             './MedTech_YTD_StandardizedHP_Categorized.xlsx',
             '/mnt/user-data/uploads/MedTech_YTD_StandardizedHP_Categorized.xlsx',
+            os.path.join(os.path.dirname(__file__), 'data', 'MedTech_YTD_StandardizedHP_Categorized.xlsx'),
             os.path.join(os.path.dirname(__file__), 'MedTech_YTD_StandardizedHP_Categorized.xlsx')
         ]
         
@@ -182,7 +185,9 @@ def load_data():
             st.info("""
             **📁 File Location Issue**
             
-            The Excel file must be in the same folder as app.py.
+            The Excel file should be in one of these locations:
+            1. In a `data` folder next to app.py (recommended)
+            2. In the same folder as app.py
             
             **Looking in these locations:**
             """)
@@ -192,10 +197,22 @@ def load_data():
             
             st.markdown("---")
             st.info("""
-            **🔧 Quick Fix:**
-            1. Make sure both `app.py` and `MedTech_YTD_StandardizedHP_Categorized.xlsx` are in the **same folder**
-            2. Run the command from that folder: `streamlit run app.py`
-            3. Or drag both files to the same location
+            **🔧 Quick Fix (Choose One):**
+            
+            **Option 1 (Recommended):** Create a `data` folder
+            1. Create a folder named `data` next to app.py
+            2. Put `MedTech_YTD_StandardizedHP_Categorized.xlsx` inside the data folder
+            3. Your structure should be:
+               ```
+               your-project/
+               ├── app.py
+               └── data/
+                   └── MedTech_YTD_StandardizedHP_Categorized.xlsx
+               ```
+            
+            **Option 2:** Put Excel file next to app.py
+            1. Put both `app.py` and `MedTech_YTD_StandardizedHP_Categorized.xlsx` in the same folder
+            2. Run from that folder: `streamlit run app.py`
             """)
             return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         
@@ -521,11 +538,12 @@ def main():
         
         if uploaded_file:
             try:
-                # Save uploaded file
-                save_path = 'MedTech_YTD_StandardizedHP_Categorized.xlsx'
+                # Save uploaded file to data folder
+                os.makedirs('data', exist_ok=True)
+                save_path = 'data/MedTech_YTD_StandardizedHP_Categorized.xlsx'
                 with open(save_path, 'wb') as f:
                     f.write(uploaded_file.read())
-                st.sidebar.success("✅ File uploaded! Please refresh the page to see updated data.")
+                st.sidebar.success("✅ File uploaded to data folder! Please refresh the page to see updated data.")
             except Exception as e:
                 st.sidebar.error(f"Error uploading file: {str(e)}")
     elif password and password != "BeaconOne":
